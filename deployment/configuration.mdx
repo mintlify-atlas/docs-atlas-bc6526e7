@@ -1,0 +1,556 @@
+---
+title: Configuration Reference
+description: Complete reference for GZCTF configuration options
+---
+
+GZCTF is configured through environment variables with the `GZCTF_` prefix or via `appsettings.json`. This page provides a comprehensive reference for all configuration options.
+
+## Configuration Methods
+
+### Environment Variables
+
+All configuration can be set via environment variables using the `GZCTF_` prefix. Nested keys use double underscores (`__`):
+
+```bash
+# Example: ConnectionStrings:Database becomes
+GZCTF_ConnectionStrings__Database="Host=localhost;Database=gzctf"
+
+# Example: EmailConfig:Smtp:Host becomes
+GZCTF_EmailConfig__Smtp__Host="smtp.example.com"
+```
+
+<Note>
+Environment variables take precedence over `appsettings.json` values.
+</Note>
+
+## Connection Strings
+
+### Database (Required)
+
+PostgreSQL connection string. GZCTF will exit if not configured.
+
+```bash
+GZCTF_ConnectionStrings__Database="Host=localhost;Port=5432;Database=gzctf;Username=gzctf;Password=your-password"
+```
+
+**Format:** Standard PostgreSQL connection string
+
+**Key components:**
+- `Host`: Database server hostname
+- `Port`: Database port (default: 5432)
+- `Database`: Database name
+- `Username`: Database user
+- `Password`: Database password
+- Optional: `SSL Mode`, `Trust Server Certificate`, etc.
+
+### Redis Cache (Optional)
+
+Redis connection string for distributed caching and SignalR backplane. If not provided, falls back to in-memory cache.
+
+```bash
+GZCTF_ConnectionStrings__RedisCache="localhost:6379,password=your-redis-password"
+```
+
+<Warning>
+Redis is required for multi-instance deployments to ensure SignalR messages are properly distributed and cache consistency is maintained.
+</Warning>
+
+### Storage (Optional)
+
+Blob storage connection string. Defaults to `disk://path=./files` if not specified.
+
+<CodeGroup>
+
+```bash Local Disk
+GZCTF_ConnectionStrings__Storage="disk://path=/app/files"
+```
+
+```bash AWS S3
+GZCTF_ConnectionStrings__Storage="aws.s3://bucket=my-bucket&region=us-east-1&accessKey=AKIAIOSFODNN7EXAMPLE&secretKey=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+```
+
+```bash MinIO
+GZCTF_ConnectionStrings__Storage="minio.s3://bucket=gzctf&endpoint=http://minio:9000&region=us-east-1&accessKey=minioadmin&secretKey=minioadmin&forcePathStyle=true&useHttp=true"
+```
+
+</CodeGroup>
+
+**Storage providers:**
+- `disk://` - Local filesystem storage
+- `aws.s3://` - AWS S3
+- `minio.s3://` - MinIO (forces path-style URLs)
+- `s3://` - Generic S3-compatible
+
+**S3 parameters:**
+- `bucket` (required): Bucket name
+- `region`: AWS region (e.g., `us-east-1`)
+- `endpoint`: Custom endpoint URL for S3-compatible services
+- `accessKey`: Access key ID
+- `secretKey`: Secret access key
+- `sessionToken`: Temporary session token (optional)
+- `forcePathStyle`: Use path-style URLs (required for MinIO)
+- `useHttp`: Use HTTP instead of HTTPS (default: false)
+
+## Global Configuration
+
+### Platform Settings
+
+```bash
+# Platform title prefix
+GZCTF_GlobalConfig__Title="GZ"
+
+# Platform slogan
+GZCTF_GlobalConfig__Slogan="Hack for fun not for profit"
+
+# Site description
+GZCTF_GlobalConfig__Description="GZ::CTF is an open source CTF platform"
+
+# Footer information
+GZCTF_GlobalConfig__FooterInfo="Powered by GZCTF"
+
+# Custom theme color (hex)
+GZCTF_GlobalConfig__CustomTheme="#1a73e8"
+
+# Enable API request encryption
+GZCTF_GlobalConfig__ApiEncryption="false"
+```
+
+### Account Policy
+
+```bash
+# Allow user registration
+GZCTF_AccountPolicy__AllowRegister="true"
+
+# Activate accounts immediately upon registration
+GZCTF_AccountPolicy__ActiveOnRegister="true"
+
+# Require CAPTCHA for registration/login
+GZCTF_AccountPolicy__UseCaptcha="false"
+
+# Require email confirmation for registration and password reset
+GZCTF_AccountPolicy__EmailConfirmationRequired="false"
+
+# Email domain whitelist/blacklist (comma-separated)
+GZCTF_AccountPolicy__EmailDomainList="example.com,test.org"
+```
+
+### Container Policy
+
+```bash
+# Auto-destroy oldest container when limit reached
+GZCTF_ContainerPolicy__AutoDestroyOnLimitReached="false"
+
+# Maximum exercise containers per user
+GZCTF_ContainerPolicy__MaxExerciseContainerCountPerUser="1"
+
+# Default container lifetime (minutes, 1-7200)
+GZCTF_ContainerPolicy__DefaultLifetime="120"
+
+# Extension duration per renewal (minutes, 1-7200)
+GZCTF_ContainerPolicy__ExtensionDuration="120"
+
+# Renewal window before expiration (minutes, 1-360)
+GZCTF_ContainerPolicy__RenewalWindow="10"
+```
+
+## Container Provider
+
+### Provider Type
+
+```bash
+# Provider type: Docker or Kubernetes
+GZCTF_ContainerProvider__Type="Docker"
+
+# Port mapping type: Default or PlatformProxy
+GZCTF_ContainerProvider__PortMappingType="Default"
+
+# Enable traffic capture for challenge containers
+GZCTF_ContainerProvider__EnableTrafficCapture="false"
+
+# Public entry point (domain or IP) for challenge access
+GZCTF_ContainerProvider__PublicEntry="ctf.example.com"
+```
+
+**Port Mapping Types:**
+- `Default`: Map container ports to random host ports
+- `PlatformProxy`: Use TCP-over-WebSocket proxy for browser access
+
+### Docker Configuration
+
+```bash
+# Docker daemon URI
+GZCTF_ContainerProvider__DockerConfig__Uri="unix:///var/run/docker.sock"
+
+# Docker registry authentication
+GZCTF_ContainerProvider__DockerConfig__UserName="registry-user"
+GZCTF_ContainerProvider__DockerConfig__Password="registry-password"
+
+# Challenge network name
+GZCTF_ContainerProvider__DockerConfig__ChallengeNetwork="gzctf-challenges"
+```
+
+### Kubernetes Configuration
+
+```bash
+# Namespace for challenge containers
+GZCTF_ContainerProvider__KubernetesConfig__Namespace="gzctf-challenges"
+
+# Kubeconfig file path (use "incluster" for in-cluster config)
+GZCTF_ContainerProvider__KubernetesConfig__KubeConfig="kube-config.yaml"
+
+# CIDR blocks allowed for challenge containers
+GZCTF_ContainerProvider__KubernetesConfig__AllowCidr__0="10.0.0.0/8"
+GZCTF_ContainerProvider__KubernetesConfig__AllowCidr__1="172.16.0.0/12"
+
+# DNS servers for challenge containers
+GZCTF_ContainerProvider__KubernetesConfig__Dns__0="8.8.8.8"
+GZCTF_ContainerProvider__KubernetesConfig__Dns__1="8.8.4.4"
+```
+
+### Registry Configuration
+
+Configure authentication for private container registries:
+
+```bash
+# Registry configuration (supports multiple registries)
+GZCTF_RegistryConfig__registry.example.com__ServerAddress="registry.example.com"
+GZCTF_RegistryConfig__registry.example.com__UserName="user"
+GZCTF_RegistryConfig__registry.example.com__Password="password"
+```
+
+## Email Configuration
+
+```bash
+# SMTP username
+GZCTF_EmailConfig__UserName="noreply@example.com"
+
+# SMTP password
+GZCTF_EmailConfig__Password="your-smtp-password"
+
+# Sender email address
+GZCTF_EmailConfig__SenderAddress="noreply@example.com"
+
+# Sender display name
+GZCTF_EmailConfig__SenderName="GZCTF Platform"
+
+# SMTP server host
+GZCTF_EmailConfig__Smtp__Host="smtp.example.com"
+
+# SMTP server port
+GZCTF_EmailConfig__Smtp__Port="587"
+
+# Bypass certificate verification (not recommended for production)
+GZCTF_EmailConfig__Smtp__BypassCertVerify="false"
+```
+
+<Note>
+Email configuration is optional but required if `EmailConfirmationRequired` is enabled.
+</Note>
+
+## CAPTCHA Configuration
+
+### CAPTCHA Provider
+
+```bash
+# Provider: None, HashPow, or CloudflareTurnstile
+GZCTF_CaptchaConfig__Provider="HashPow"
+```
+
+### Hash Proof-of-Work (HashPow)
+
+```bash
+# Difficulty level (8-48, higher = more difficult)
+GZCTF_CaptchaConfig__HashPow__Difficulty="18"
+```
+
+### Cloudflare Turnstile
+
+```bash
+GZCTF_CaptchaConfig__Provider="CloudflareTurnstile"
+GZCTF_CaptchaConfig__SiteKey="your-turnstile-site-key"
+GZCTF_CaptchaConfig__SecretKey="your-turnstile-secret-key"
+```
+
+## Telemetry and Observability
+
+### Prometheus Metrics
+
+```bash
+# Enable Prometheus metrics
+GZCTF_Telemetry__Prometheus__Enable="true"
+
+# Add _total suffix to counter names
+GZCTF_Telemetry__Prometheus__TotalNameSuffixForCounters="true"
+```
+
+Metrics endpoint: `http://localhost:3000/metrics`
+
+### OpenTelemetry
+
+```bash
+# Enable OpenTelemetry
+GZCTF_Telemetry__OpenTelemetry__Enable="true"
+
+# OTLP endpoint
+GZCTF_Telemetry__OpenTelemetry__EndpointUri="http://otel-collector:4317"
+
+# Protocol: Grpc or HttpProtobuf
+GZCTF_Telemetry__OpenTelemetry__Protocol="Grpc"
+```
+
+### Azure Monitor
+
+```bash
+# Enable Azure Monitor
+GZCTF_Telemetry__AzureMonitor__Enable="true"
+
+# Connection string
+GZCTF_Telemetry__AzureMonitor__ConnectionString="InstrumentationKey=..."
+```
+
+### Console Exporter
+
+```bash
+# Enable console telemetry output (development only)
+GZCTF_Telemetry__Console__Enable="false"
+```
+
+## Logging Configuration
+
+### Grafana Loki
+
+```bash
+# Enable Loki logging
+GZCTF_GrafanaLokiOptions__Enable="true"
+
+# Loki endpoint
+GZCTF_GrafanaLokiOptions__EndpointUri="http://loki:3100"
+
+# Minimum log level
+GZCTF_GrafanaLokiOptions__MinimumLevel="Information"
+
+# Tenant ID (for multi-tenant Loki)
+GZCTF_GrafanaLokiOptions__Tenant="gzctf"
+
+# Static labels
+GZCTF_GrafanaLokiOptions__Labels__0__Key="app"
+GZCTF_GrafanaLokiOptions__Labels__0__Value="gzctf"
+
+# Properties to extract as labels
+GZCTF_GrafanaLokiOptions__PropertiesAsLabels__0="Environment"
+GZCTF_GrafanaLokiOptions__PropertiesAsLabels__1="SourceContext"
+```
+
+## Forwarded Headers
+
+<Note>
+Configure forwarded headers when running behind a reverse proxy.
+</Note>
+
+```bash
+# Forward headers to process
+GZCTF_ForwardedOptions__ForwardedHeaders="XForwardedFor,XForwardedProto"
+
+# Known proxy IP addresses
+GZCTF_ForwardedOptions__KnownProxies__0="172.18.0.1"
+GZCTF_ForwardedOptions__KnownProxies__1="192.168.1.1"
+
+# Trusted networks (CIDR notation)
+GZCTF_ForwardedOptions__KnownIPNetworks__0="10.0.0.0/8"
+GZCTF_ForwardedOptions__KnownIPNetworks__1="172.16.0.0/12"
+GZCTF_ForwardedOptions__KnownIPNetworks__2="192.168.0.0/16"
+
+# Forward limit (0 = unlimited)
+GZCTF_ForwardedOptions__ForwardLimit="1"
+```
+
+## Rate Limiting
+
+```bash
+# Disable rate limiting (not recommended for production)
+GZCTF_DisableRateLimit="false"
+```
+
+Rate limiting policies are defined in code (see Middlewares/RateLimiter.cs:51):
+
+- **Global**: 150 requests/minute per user or IP
+- **Register**: 20 requests per 150 seconds
+- **Query**: Token bucket (100 tokens, 10/10s refill)
+- **Container**: Token bucket (120 tokens, 30/10s refill)
+- **Submit**: Token bucket (100 tokens, 50/5s refill)
+- **Concurrency**: 1 concurrent request per endpoint
+
+## Kestrel Configuration
+
+### Port Configuration
+
+GZCTF listens on two ports:
+
+- **8080**: Main application HTTP endpoint
+- **3000**: Health checks and metrics endpoint
+
+### Advanced Kestrel Settings
+
+You can configure Kestrel via the `Kestrel` section:
+
+```json
+{
+  "Kestrel": {
+    "Limits": {
+      "MaxRequestBodySize": 67108864,
+      "MaxConcurrentConnections": 100,
+      "MaxConcurrentUpgradedConnections": 100
+    }
+  }
+}
+```
+
+## Environment-Specific Configuration
+
+### Development
+
+```bash
+ASPNETCORE_ENVIRONMENT="Development"
+```
+
+Enables:
+- Detailed error pages
+- Sensitive data logging for EF Core
+- SpaProxy for frontend development
+- OpenAPI/Scalar UI at `/scalar/v1`
+
+### Production
+
+```bash
+ASPNETCORE_ENVIRONMENT="Production"
+```
+
+Enables:
+- Minimal error disclosure
+- Optimized performance
+- Production logging
+
+## Data Protection
+
+Data protection keys are automatically persisted to the database using `DataProtectionKeys` table. No additional configuration needed.
+
+**Token lifetime**: 3 hours (for email confirmation, password reset, etc.)
+
+## Complete Example
+
+<CodeGroup>
+
+```bash .env
+# Database (Required)
+GZCTF_ConnectionStrings__Database="Host=postgres;Port=5432;Database=gzctf;Username=gzctf;Password=secure-password"
+
+# Redis (Recommended)
+GZCTF_ConnectionStrings__RedisCache="redis:6379"
+
+# Storage (S3)
+GZCTF_ConnectionStrings__Storage="aws.s3://bucket=gzctf-prod&region=us-east-1&accessKey=AKIA...&secretKey=wJal..."
+
+# Global Config
+GZCTF_GlobalConfig__Title="MyCTF"
+GZCTF_GlobalConfig__Slogan="Capture All The Flags"
+
+# Account Policy
+GZCTF_AccountPolicy__AllowRegister="true"
+GZCTF_AccountPolicy__UseCaptcha="true"
+GZCTF_AccountPolicy__EmailConfirmationRequired="true"
+
+# Email
+GZCTF_EmailConfig__UserName="noreply@example.com"
+GZCTF_EmailConfig__Password="smtp-password"
+GZCTF_EmailConfig__SenderAddress="noreply@example.com"
+GZCTF_EmailConfig__SenderName="MyCTF Platform"
+GZCTF_EmailConfig__Smtp__Host="smtp.gmail.com"
+GZCTF_EmailConfig__Smtp__Port="587"
+
+# CAPTCHA
+GZCTF_CaptchaConfig__Provider="CloudflareTurnstile"
+GZCTF_CaptchaConfig__SiteKey="0x4AAA..."
+GZCTF_CaptchaConfig__SecretKey="0x4AAA..."
+
+# Container Provider
+GZCTF_ContainerProvider__Type="Kubernetes"
+GZCTF_ContainerProvider__PublicEntry="ctf.example.com"
+GZCTF_ContainerProvider__KubernetesConfig__Namespace="gzctf-challenges"
+GZCTF_ContainerProvider__KubernetesConfig__KubeConfig="incluster"
+
+# Container Policy
+GZCTF_ContainerPolicy__DefaultLifetime="120"
+GZCTF_ContainerPolicy__ExtensionDuration="60"
+
+# Telemetry
+GZCTF_Telemetry__Prometheus__Enable="true"
+GZCTF_Telemetry__OpenTelemetry__Enable="true"
+GZCTF_Telemetry__OpenTelemetry__EndpointUri="http://otel-collector:4317"
+
+# Forwarded Headers
+GZCTF_ForwardedOptions__ForwardedHeaders="XForwardedFor,XForwardedProto"
+GZCTF_ForwardedOptions__KnownProxies__0="10.0.0.1"
+```
+
+```json appsettings.Production.json
+{
+  "ConnectionStrings": {
+    "Database": "Host=postgres;Database=gzctf;Username=gzctf;Password=secure-password",
+    "RedisCache": "redis:6379",
+    "Storage": "aws.s3://bucket=gzctf&region=us-east-1&accessKey=AKIA...&secretKey=..."
+  },
+  "GlobalConfig": {
+    "Title": "MyCTF",
+    "Slogan": "Capture All The Flags"
+  },
+  "AccountPolicy": {
+    "AllowRegister": true,
+    "UseCaptcha": true,
+    "EmailConfirmationRequired": true
+  },
+  "EmailConfig": {
+    "UserName": "noreply@example.com",
+    "Password": "smtp-password",
+    "SenderAddress": "noreply@example.com",
+    "SenderName": "MyCTF Platform",
+    "Smtp": {
+      "Host": "smtp.gmail.com",
+      "Port": 587
+    }
+  },
+  "CaptchaConfig": {
+    "Provider": "CloudflareTurnstile",
+    "SiteKey": "0x4AAA...",
+    "SecretKey": "0x4AAA..."
+  },
+  "ContainerProvider": {
+    "Type": "Kubernetes",
+    "PublicEntry": "ctf.example.com",
+    "KubernetesConfig": {
+      "Namespace": "gzctf-challenges",
+      "KubeConfig": "incluster"
+    }
+  },
+  "ContainerPolicy": {
+    "DefaultLifetime": 120,
+    "ExtensionDuration": 60
+  },
+  "Telemetry": {
+    "Prometheus": {
+      "Enable": true
+    },
+    "OpenTelemetry": {
+      "Enable": true,
+      "EndpointUri": "http://otel-collector:4317"
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+## Next Steps
+
+- [Docker Deployment](/deployment/docker) - Deploy with Docker Compose
+- [Kubernetes Deployment](/deployment/kubernetes) - Deploy on Kubernetes
+- [Security Considerations](/deployment/security) - Security best practices

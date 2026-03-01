@@ -1,0 +1,351 @@
+---
+title: Writeups
+description: Submit post-game writeups and view the review process
+icon: file-pen
+---
+
+## Overview
+
+Writeups are post-game documentation where teams explain their solutions to challenges. GZCTF supports mandatory writeup submission with deadlines and review workflows.
+
+## When Writeups Are Required
+
+Writeups may be required based on game configuration:
+
+```json
+{
+  "writeupRequired": true,
+  "writeupDeadline": "2024-03-15T23:59:59Z"
+}
+```
+
+Check if writeups are required:
+
+```http
+GET /api/Game/{gameId}/Details
+```
+
+Look for:
+- **writeupRequired**: Boolean indicating if writeups are mandatory
+- **writeupDeadline**: Submission deadline (UTC timezone)
+
+<Note>
+  Writeup requirements are shown in game details and the game details page.
+</Note>
+
+## Writeup Submission
+
+### Requirements
+
+Writeups must meet these requirements:
+
+- **Format**: PDF files only (`.pdf` extension)
+- **Size**: Maximum 20 MB
+- **Content**: Should document your solutions and methodologies
+- **Timing**: Must be submitted before the deadline
+
+### Submission Process
+
+<Steps>
+  <Step title="Prepare Your Writeup">
+    Create a comprehensive writeup covering:
+    - Challenges solved by your team
+    - Methodologies and tools used
+    - Step-by-step solutions
+    - Key findings and insights
+    - Screenshots or proof of exploitation
+    
+    <Info>
+      Export your writeup as a PDF from your preferred document editor (Word, LaTeX, Markdown, etc.).
+    </Info>
+  </Step>
+  
+  <Step title="Check Current Status">
+    View your current writeup submission status:
+    
+    ```http
+    GET /api/Game/{gameId}/Writeup
+    ```
+    
+    Returns:
+    ```json
+    {
+      "submitted": false,
+      "fileName": null,
+      "fileSize": 0,
+      "uploadTime": null,
+      "deadline": "2024-03-15T23:59:59Z"
+    }
+    ```
+  </Step>
+  
+  <Step title="Upload Your Writeup">
+    Submit your PDF file:
+    
+    ```http
+    POST /api/Game/{gameId}/Writeup
+    Content-Type: multipart/form-data
+    
+    file: [your_writeup.pdf]
+    ```
+    
+    <Note>
+      The file is stored with a generated name: `Writeup-{gameId}-{teamId}-{timestamp}.pdf`
+    </Note>
+  </Step>
+  
+  <Step title="Confirm Submission">
+    Upon successful upload:
+    
+    ```
+    ✓ Writeup submitted successfully for team [Team Name]
+    ```
+    
+    Your writeup is now pending review.
+  </Step>
+</Steps>
+
+### Resubmission
+
+You can resubmit your writeup before the deadline:
+
+<Warning>
+  - Resubmitting overwrites your previous writeup
+  - The old file is permanently deleted
+  - Ensure your new version is complete before uploading
+</Warning>
+
+## Validation Rules
+
+### File Format
+
+```
+✗ Only PDF files are allowed
+```
+
+**Solution**: Convert your writeup to PDF format. Most document editors support PDF export.
+
+### File Size
+
+```
+✗ File size cannot be zero
+✗ File is too large (max 20 MB)
+```
+
+**Solutions**:
+- Ensure your file is not empty
+- Compress images in your PDF
+- Use PDF compression tools
+- Remove unnecessary content
+
+### Deadline
+
+```
+✗ Writeup deadline has passed
+```
+
+**Solution**: Writeups cannot be submitted after the deadline. Contact game administrators if you need an extension.
+
+### Game Requirements
+
+```
+✗ Writeups are not required for this game
+```
+
+**Info**: The game organizer has not enabled writeup requirements. Submission is optional or not supported.
+
+### Participation Status
+
+```
+✗ You have not participated in this game
+```
+
+**Solution**: Only teams that participated in the game can submit writeups.
+
+## After Submission
+
+### Review Process
+
+After submission, your writeup enters the review queue:
+
+1. **Submitted**: Writeup uploaded and awaiting review
+2. **Under Review**: Organizers reviewing your writeup
+3. **Accepted**: Writeup approved
+4. **Revision Requested**: Changes needed (if review system is implemented)
+
+<Note>
+  The review system implementation may vary. Check with game organizers for specific review criteria.
+</Note>
+
+### Accessing Your Submission
+
+View your submitted writeup status:
+
+```http
+GET /api/Game/{gameId}/Writeup
+```
+
+Response with submission:
+```json
+{
+  "submitted": true,
+  "fileName": "Writeup-123-456-20240315-14.30.00Z.pdf",
+  "fileSize": 2458624,
+  "uploadTime": "2024-03-15T14:30:00Z",
+  "deadline": "2024-03-15T23:59:59Z"
+}
+```
+
+## Writeup Content Guidelines
+
+While requirements vary by game, good writeups typically include:
+
+### Structure
+
+- **Title Page**: Team name, game name, date
+- **Table of Contents**: For longer writeups
+- **Challenge Sections**: One section per solved challenge
+- **Conclusion**: Overall experience and learnings
+
+### Per Challenge
+
+1. **Challenge Name & Category**: Identify the challenge
+2. **Description**: Brief challenge overview
+3. **Analysis**: Initial reconnaissance and observations
+4. **Solution**: Step-by-step exploitation process
+5. **Flag**: The captured flag (if appropriate to share)
+6. **Tools Used**: List of tools and scripts
+7. **References**: External resources used
+
+<Tabs>
+  <Tab title="Good Writeup">
+    ```markdown
+    # Challenge: Web Login Bypass
+    
+    ## Description
+    A login page with SQL injection vulnerability.
+    
+    ## Analysis
+    Testing the login form revealed:
+    - No input sanitization
+    - Error messages leak SQL syntax
+    - Username field is vulnerable
+    
+    ## Solution
+    1. Identified SQL injection in username field
+    2. Used payload: admin' OR '1'='1
+    3. Bypassed authentication
+    4. Retrieved flag from admin dashboard
+    
+    ## Flag
+    flag{sql_1nj3ct10n_is_d4ng3r0us}
+    
+    ## Tools
+    - Burp Suite
+    - SQLMap
+    ```
+    
+    ✓ Clear, detailed, reproducible
+  </Tab>
+  
+  <Tab title="Poor Writeup">
+    ```markdown
+    # Web Challenge
+    
+    Used SQL injection. Got the flag.
+    
+    flag{sql_1nj3ct10n_is_d4ng3r0us}
+    ```
+    
+    ✗ Too brief, no methodology, not educational
+  </Tab>
+</Tabs>
+
+## Downloading Writeups
+
+<Info>
+  Writeup download and public access features may be implemented by game organizers. The basic storage infrastructure is provided by GZCTF.
+</Info>
+
+Organizers can access submitted writeups through:
+- Admin dashboard
+- Direct blob storage access
+- Bulk download features (if implemented)
+
+## API Reference
+
+Writeup operations are implemented in GameController.cs:
+
+### Get Writeup Status
+
+```http
+GET /api/Game/{id}/Writeup
+```
+
+**Response**: BasicWriteupInfoModel with submission details
+
+**Reference**: GameController.cs:1098-1121
+
+### Submit Writeup
+
+```http
+POST /api/Game/{id}/Writeup
+Content-Type: multipart/form-data
+
+file: [your_writeup.pdf]
+```
+
+**Response**: 200 OK on success
+
+**Reference**: GameController.cs:1123-1185
+
+**Validations**:
+- File size: 0 < size ≤ 20 MB
+- Content type: `application/pdf`
+- File extension: `.pdf`
+- Deadline: current time < writeupDeadline
+- Game requirement: writeupRequired = true
+
+## Best Practices
+
+<Steps>
+  <Step title="Start Early">
+    Begin writing your writeup during the competition:
+    - Document your process in real-time
+    - Take screenshots as you progress
+    - Note tool commands and payloads
+  </Step>
+  
+  <Step title="Be Thorough">
+    Provide enough detail for reproduction:
+    - Explain your thought process
+    - Include failed attempts and pivots
+    - Show command outputs and results
+  </Step>
+  
+  <Step title="Use Visuals">
+    Enhance clarity with images:
+    - Screenshots of key steps
+    - Diagrams of exploitation flow
+    - Code snippets with syntax highlighting
+  </Step>
+  
+  <Step title="Review Before Submitting">
+    Quality check your writeup:
+    - Proofread for clarity and errors
+    - Verify all images are included
+    - Ensure PDF exports correctly
+    - Check file size is under 20 MB
+  </Step>
+  
+  <Step title="Submit Before Deadline">
+    Don't wait until the last minute:
+    - Submit with buffer time for issues
+    - Verify upload success
+    - Keep a local backup copy
+  </Step>
+</Steps>
+
+<Warning>
+  Missing the writeup deadline may result in penalties or disqualification if writeups are mandatory. Plan accordingly!
+</Warning>

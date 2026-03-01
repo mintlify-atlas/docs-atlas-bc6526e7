@@ -1,0 +1,324 @@
+---
+title: Creating Games
+description: Learn how to create and configure CTF competitions in GZCTF
+icon: trophy
+---
+
+This guide covers the complete process of creating and managing CTF games in GZCTF, from initial setup to competition launch.
+
+## Creating a New Game
+
+Games are the core entity in GZCTF, representing individual CTF competitions or practice events.
+
+<Steps>
+  <Step title="Navigate to Game Management">
+    Access the admin panel and go to **Games** section. Click the **Create Game** button.
+  </Step>
+  
+  <Step title="Configure Basic Information">
+    Fill in the essential game details:
+    
+    <ParamField path="Title" type="string" required>
+      The name of your CTF competition
+    </ParamField>
+    
+    <ParamField path="Summary" type="string">
+      A brief description displayed in game listings
+    </ParamField>
+    
+    <ParamField path="Content" type="string">
+      Detailed game description supporting Markdown formatting. Explain rules, prizes, and other important information.
+    </ParamField>
+  </Step>
+  
+  <Step title="Set Game Timing">
+    Configure when your competition runs:
+    
+    <ParamField path="StartTimeUtc" type="datetime" required>
+      Competition start time in UTC
+    </ParamField>
+    
+    <ParamField path="EndTimeUtc" type="datetime" required>
+      Competition end time in UTC
+    </ParamField>
+    
+    <Warning>
+      Ensure the end time is after the start time. The game will automatically become active during this window.
+    </Warning>
+  </Step>
+</Steps>
+
+## Game Configuration Options
+
+### Access Control
+
+Control who can participate in your game:
+
+<ParamField path="Hidden" type="boolean" default={false}>
+  Hide the game from public listings. Useful for private or upcoming competitions.
+</ParamField>
+
+<ParamField path="InviteCode" type="string">
+  Require teams to enter an invitation code to join. Maximum 32 characters.
+</ParamField>
+
+<ParamField path="AcceptWithoutReview" type="boolean" default={false}>
+  Automatically accept team registrations without admin approval
+</ParamField>
+
+### Team Configuration
+
+<ParamField path="TeamMemberCountLimit" type="integer" default={0}>
+  Maximum team size. Set to `0` for unlimited team members.
+</ParamField>
+
+<CodeGroup>
+```json Example: Small Teams
+{
+  "TeamMemberCountLimit": 4
+}
+```
+
+```json Example: Solo Competition
+{
+  "TeamMemberCountLimit": 1
+}
+```
+</CodeGroup>
+
+### Container Settings
+
+<ParamField path="ContainerCountLimit" type="integer" default={3}>
+  Maximum number of simultaneous container instances per team. Prevents resource exhaustion.
+</ParamField>
+
+<Info>
+  Set container limits based on your infrastructure capacity. Each container consumes CPU, memory, and network resources.
+</Info>
+
+## Scoring Configuration
+
+### Blood Bonus System
+
+Reward teams who solve challenges first:
+
+<ParamField path="BloodBonusValue" type="long" default={10000}>
+  Points distributed to first three teams solving each challenge:
+  - **1st Blood**: 50% of bonus value
+  - **2nd Blood**: 30% of bonus value  
+  - **3rd Blood**: 20% of bonus value
+</ParamField>
+
+<CodeGroup>
+```typescript Bonus Calculation
+const bloodBonus = {
+  first: BloodBonusValue * 0.50,   // 5000 points
+  second: BloodBonusValue * 0.30,  // 3000 points
+  third: BloodBonusValue * 0.20    // 2000 points
+};
+```
+</CodeGroup>
+
+## Practice Mode
+
+<ParamField path="PracticeMode" type="boolean" default={true}>
+  Enable practice mode to keep the game accessible after it ends. Players can continue solving challenges without affecting rankings.
+</ParamField>
+
+<Card title="Practice Mode Benefits" icon="graduation-cap">
+  - Learning opportunity for late participants
+  - Challenge archive for training
+  - No impact on original competition results
+</Card>
+
+## Writeup Management
+
+### Requiring Writeups
+
+<ParamField path="WriteupRequired" type="boolean" default={false}>
+  Require teams to submit writeups after the competition
+</ParamField>
+
+<ParamField path="WriteupDeadline" type="datetime">
+  Submission deadline for writeups (typically 1-2 weeks after game ends)
+</ParamField>
+
+<ParamField path="WriteupNote" type="string">
+  Additional instructions or requirements for writeup submissions
+</ParamField>
+
+<Accordion title="Writeup Submission Format">
+  Teams can submit writeups in PDF or Markdown format. Admins can:
+  - View all submitted writeups from the admin panel
+  - Download all writeups as a bulk archive
+  - Review writeup quality before making them public
+</Accordion>
+
+## Divisions
+
+Divisions allow you to separate teams into different competition tracks (e.g., university students vs. professionals).
+
+<Steps>
+  <Step title="Create Division">
+    Navigate to **Game Settings** → **Divisions** and click **Add Division**.
+  </Step>
+  
+  <Step title="Configure Division Properties">
+    <ParamField path="Name" type="string" required>
+      Division name (e.g., "University", "Professional", "High School")
+    </ParamField>
+    
+    <ParamField path="Description" type="string">
+      Explain eligibility requirements
+    </ParamField>
+  </Step>
+  
+  <Step title="Assign Teams">
+    Teams select their division during registration, or admins can manually assign divisions through the participation management interface.
+  </Step>
+</Steps>
+
+<Note>
+  Each division maintains separate scoreboards, allowing fair competition within similar skill levels.
+</Note>
+
+## Game Poster
+
+Customize your game's visual appearance:
+
+<Steps>
+  <Step title="Upload Poster">
+    Click **Update Poster** in game settings
+  </Step>
+  
+  <Step title="Image Requirements">
+    - Maximum size: 3 MB
+    - Recommended dimensions: 1920×1080 or 16:9 aspect ratio
+    - Supported formats: PNG, JPG, WebP
+  </Step>
+</Steps>
+
+## Game Notices
+
+Communicate with participants during the competition:
+
+<Card title="Notice Types" icon="bell">
+  - **Manual Notices**: Custom announcements from admins
+  - **System Notices**: Automatic notifications (new challenges, hints)
+</Card>
+
+<CodeGroup>
+```javascript Create Notice (API)
+POST /api/edit/games/{id}/notices
+
+{
+  "content": "Server maintenance in 30 minutes. Containers will restart."
+}
+```
+</CodeGroup>
+
+<Info>
+  System notices are automatically generated when you:
+  - Enable a new challenge during active competition
+  - Update challenge hints
+</Info>
+
+## API Reference
+
+Key endpoints for game management:
+
+<AccordionGroup>
+  <Accordion title="POST /api/edit/games" icon="plus">
+    Create a new game. See [GameInfoModel](~/workspace/source/src/GZCTF/Models/Request/Edit/GameInfoModel.cs:8-133) for request schema.
+  </Accordion>
+  
+  <Accordion title="PUT /api/edit/games/{id}" icon="pen">
+    Update game settings. Changes apply immediately.
+  </Accordion>
+  
+  <Accordion title="DELETE /api/edit/games/{id}" icon="trash">
+    Permanently delete a game and all associated data (challenges, submissions, instances).
+    
+    <Warning>
+      This action cannot be undone. Export your game data first if needed.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="POST /api/edit/games/{id}/export" icon="download">
+    Export game as ZIP archive including all challenges, divisions, and attachments. Perfect for backups or sharing game templates.
+  </Accordion>
+  
+  <Accordion title="POST /api/edit/games/import" icon="upload">
+    Import a previously exported game package.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Test Before Launch" icon="flask">
+    Create a test game with practice mode enabled to verify:
+    - Challenge functionality
+    - Scoring calculations
+    - Container deployments
+  </Card>
+  
+  <Card title="Set Clear Rules" icon="book">
+    Include in game content:
+    - Prohibited activities
+    - Flag submission format
+    - Scoring methodology
+    - Support contact information
+  </Card>
+  
+  <Card title="Monitor Resources" icon="server">
+    Review container limits based on:
+    - Expected participant count
+    - Infrastructure capacity
+    - Challenge resource requirements
+  </Card>
+  
+  <Card title="Plan Communications" icon="comments">
+    Prepare notices for:
+    - Game start announcement
+    - Scheduled maintenance
+    - Time warnings (1 hour, 30 min before end)
+  </Card>
+</CardGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Game not visible to users">
+    Check:
+    - **Hidden** flag is disabled
+    - Start time is in the past
+    - Users have required invitation code
+  </Accordion>
+  
+  <Accordion title="Teams can't register">
+    Verify:
+    - Team size doesn't exceed `TeamMemberCountLimit`
+    - `AcceptWithoutReview` is enabled or admin approves manually
+    - Users are authenticated
+  </Accordion>
+  
+  <Accordion title="Scoreboard not updating">
+    Try:
+    - Flush scoreboard cache: `POST /api/edit/games/{id}/scoreboard/flush`
+    - Verify challenges have valid flags
+    - Check submission logs for errors
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Challenge Management" icon="puzzle-piece" href="/admin/challenge-management">
+    Add challenges to your game
+  </Card>
+  
+  <Card title="Team Management" icon="users" href="/admin/team-management">
+    Manage team registrations
+  </Card>
+</CardGroup>

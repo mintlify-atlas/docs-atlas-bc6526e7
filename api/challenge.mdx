@@ -1,0 +1,435 @@
+---
+title: 'Challenge API'
+description: 'Challenge management and container operations'
+icon: 'puzzle-piece'
+---
+
+## Overview
+
+Challenges are the core of CTF games. This API provides endpoints for creating, updating, and managing challenges, flags, and dynamic containers.
+
+<Note>
+  Most challenge management endpoints require **Admin** privileges and are part of the Edit API.
+</Note>
+
+## Challenge CRUD
+
+### Create Challenge
+
+Add a new challenge to a game.
+
+#### POST /api/edit/games/{id}/challenges
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  Challenge title
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  Challenge type: `StaticAttachment`, `StaticContainer`, `DynamicAttachment`, `DynamicContainer`
+</ParamField>
+
+<ParamField body="category" type="string" required>
+  Challenge category (e.g., Web, Crypto, Pwn, Reverse, Misc)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "title": "SQL Injection 101",
+  "type": "StaticContainer",
+  "category": "Web"
+}
+```
+
+```json Response
+{
+  "id": 15,
+  "title": "SQL Injection 101",
+  "type": "StaticContainer",
+  "category": "Web",
+  "isEnabled": false,
+  "score": 0
+}
+```
+</ResponseExample>
+
+### List Challenges
+
+Get all challenges for a game.
+
+#### GET /api/edit/games/{id}/challenges
+
+<ResponseExample>
+```json Response
+[
+  {
+    "id": 1,
+    "title": "Web Challenge",
+    "type": "StaticContainer",
+    "category": "Web",
+    "score": 100,
+    "isEnabled": true,
+    "solvedCount": 45
+  }
+]
+```
+</ResponseExample>
+
+### Get Challenge Details
+
+Retrieve full challenge information including flags.
+
+#### GET /api/edit/games/{id}/challenges/{cId}
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ParamField path="cId" type="integer" required>
+  Challenge ID
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "id": 1,
+  "title": "SQL Injection 101",
+  "description": "Find the vulnerability...",
+  "category": "Web",
+  "type": "StaticContainer",
+  "isEnabled": true,
+  "enableTrafficCapture": false,
+  "tag": "easy",
+  "hints": ["Try union-based injection", "Check error messages"],
+  "flags": [
+    {
+      "id": 1,
+      "flag": "flag{sql_1nj3ct10n}",
+      "attachmentType": null
+    }
+  ],
+  "attachment": {
+    "type": "None",
+    "url": null
+  },
+  "containerImage": "ctf/sql-challenge:latest",
+  "containerExposePort": 80,
+  "cpuCount": 1,
+  "memoryLimit": 64,
+  "storageLimit": 256,
+  "originalScore": 500,
+  "minScoreRate": 0.25,
+  "difficulty": 3.5,
+  "acceptedCount": 45
+}
+```
+</ResponseExample>
+
+### Update Challenge
+
+Modify challenge properties.
+
+#### PUT /api/edit/games/{id}/challenges/{cId}
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ParamField path="cId" type="integer" required>
+  Challenge ID
+</ParamField>
+
+<ParamField body="title" type="string">
+  Challenge title
+</ParamField>
+
+<ParamField body="description" type="string">
+  Challenge description (supports Markdown)
+</ParamField>
+
+<ParamField body="category" type="string">
+  Challenge category
+</ParamField>
+
+<ParamField body="hints" type="array">
+  Array of hint strings
+</ParamField>
+
+<ParamField body="isEnabled" type="boolean">
+  Enable/disable challenge visibility
+</ParamField>
+
+<ParamField body="tag" type="string">
+  Challenge tag (e.g., easy, medium, hard)
+</ParamField>
+
+<ParamField body="enableTrafficCapture" type="boolean">
+  Enable traffic capture for container challenges
+</ParamField>
+
+<ParamField body="originalScore" type="integer">
+  Base score for the challenge
+</ParamField>
+
+<ParamField body="minScoreRate" type="number">
+  Minimum score rate (0.0-1.0) for dynamic scoring
+</ParamField>
+
+<ParamField body="difficulty" type="number">
+  Difficulty coefficient for scoring calculation
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "title": "Advanced SQL Injection",
+  "description": "Updated description...",
+  "isEnabled": true,
+  "hints": ["New hint 1", "New hint 2"],
+  "originalScore": 600
+}
+```
+</ResponseExample>
+
+<Warning>
+  Enabling a challenge without flags will fail. Ensure at least one flag is added before enabling.
+</Warning>
+
+### Delete Challenge
+
+Remove a challenge from a game.
+
+#### DELETE /api/edit/games/{id}/challenges/{cId}
+
+<Note>
+  This will destroy all associated containers and remove the challenge from the scoreboard.
+</Note>
+
+## Flag Management
+
+### Add Flags
+
+Add one or more flags to a challenge.
+
+#### POST /api/edit/games/{id}/challenges/{cId}/flags
+
+<ParamField body="flags" type="array" required>
+  Array of flag objects
+</ParamField>
+
+<ResponseExample>
+```json Request
+[
+  {
+    "flag": "flag{first_flag}",
+    "attachmentType": null
+  },
+  {
+    "flag": "flag{second_flag}",
+    "attachmentType": "Local"
+  }
+]
+```
+</ResponseExample>
+
+<Info>
+  For `DynamicContainer` challenges, use flag templates like `flag{[GUID]}` or `flag{[TEAM_HASH]}` instead of static flags.
+</Info>
+
+### Delete Flag
+
+Remove a flag from a challenge.
+
+#### DELETE /api/edit/games/{id}/challenges/{cId}/flags/{fId}
+
+<ParamField path="fId" type="integer" required>
+  Flag ID
+</ParamField>
+
+## Container Management
+
+### Container Types
+
+| Type | Description |
+|------|-------------|
+| `StaticContainer` | Single shared container for all teams |
+| `DynamicContainer` | Unique container instance per team with dynamic flags |
+
+### Container Configuration
+
+<ParamField body="containerImage" type="string">
+  Docker image name (e.g., `ctf/web-challenge:latest`)
+</ParamField>
+
+<ParamField body="containerExposePort" type="integer">
+  Port to expose from container (1-65535)
+</ParamField>
+
+<ParamField body="cpuCount" type="integer" default="1">
+  Number of CPU cores to allocate
+</ParamField>
+
+<ParamField body="memoryLimit" type="integer" default="64">
+  Memory limit in MB
+</ParamField>
+
+<ParamField body="storageLimit" type="integer" default="256">
+  Storage limit in MB
+</ParamField>
+
+<ParamField body="networkMode" type="string" default="Open">
+  Network mode: `Open`, `Isolated`, `Custom`
+</ParamField>
+
+### Create Test Container
+
+Launch a test container instance for challenge verification.
+
+#### POST /api/edit/games/{id}/challenges/{cId}/container
+
+<Note>
+  Test containers use the prefix "admin" and are for admin testing only.
+</Note>
+
+<ResponseExample>
+```json Response
+{
+  "containerId": "a1b2c3d4e5f6",
+  "entry": "http://test.ctf.local:31337",
+  "flag": "flag{test_flag_12345}",
+  "startedAt": "2026-03-01T12:00:00Z",
+  "expectStopAt": "2026-03-01T14:00:00Z"
+}
+```
+</ResponseExample>
+
+### Destroy Test Container
+
+Stop and remove a test container.
+
+#### DELETE /api/edit/games/{id}/challenges/{cId}/container
+
+## Attachments
+
+### Update Attachment
+
+Add or update challenge attachments.
+
+#### POST /api/edit/games/{id}/challenges/{cId}/attachment
+
+<Warning>
+  This endpoint is for static attachments only. Use dynamic assets API for `DynamicAttachment` challenges.
+</Warning>
+
+<ParamField body="attachmentType" type="string" required>
+  Type: `None`, `Local`, `Remote`
+</ParamField>
+
+<ParamField body="remoteUrl" type="string">
+  URL for remote attachments
+</ParamField>
+
+<ParamField body="fileHash" type="string">
+  Hash of uploaded local file
+</ParamField>
+
+<ResponseExample>
+```json Request (Remote)
+{
+  "attachmentType": "Remote",
+  "remoteUrl": "https://example.com/challenge-file.zip"
+}
+```
+
+```json Request (Local)
+{
+  "attachmentType": "Local",
+  "fileHash": "abc123def456..."
+}
+```
+</ResponseExample>
+
+<Info>
+  Upload files to `/api/assets` first to get the file hash, then reference it in the attachment.
+</Info>
+
+## Traffic Capture
+
+For container challenges, traffic capture can be enabled to record network activity.
+
+### Enable Traffic Capture
+
+Set `enableTrafficCapture: true` when updating the challenge.
+
+### Get Capture Files
+
+#### GET /api/game/captures/{challengeId}/{partId}
+
+List traffic capture files for a team.
+
+<ParamField path="challengeId" type="integer" required>
+  Challenge ID
+</ParamField>
+
+<ParamField path="partId" type="integer" required>
+  Team participation ID
+</ParamField>
+
+<Note>Requires Monitor permission.</Note>
+
+### Download Capture
+
+#### GET /api/game/captures/{challengeId}/{partId}/{filename}
+
+Download a specific capture file.
+
+## Challenge Types Reference
+
+<AccordionGroup>
+  <Accordion title="StaticAttachment">
+    Simple challenge with a downloadable file attachment. Flag is static and shared across all teams.
+    
+    - No containers
+    - One or more static flags
+    - Optional attachment (local or remote)
+  </Accordion>
+  
+  <Accordion title="StaticContainer">
+    Container-based challenge with shared instance. All teams connect to the same container.
+    
+    - Single shared container
+    - Static flags
+    - Requires container configuration
+  </Accordion>
+  
+  <Accordion title="DynamicAttachment">
+    Generates unique attachments per team with embedded dynamic flags.
+    
+    - No containers
+    - Flag template required (e.g., `flag{[GUID]}`)
+    - Dynamic attachment generation
+  </Accordion>
+  
+  <Accordion title="DynamicContainer">
+    Unique container per team with dynamic flags injected at runtime.
+    
+    - Individual containers per team
+    - Flag template required
+    - Resource-intensive but prevents flag sharing
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Game API" icon="gamepad" href="/api/game">
+    Game management endpoints
+  </Card>
+  <Card title="Admin API" icon="shield" href="/api/admin">
+    Administrative operations
+  </Card>
+</CardGroup>

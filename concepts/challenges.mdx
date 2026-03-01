@@ -1,0 +1,219 @@
+---
+title: Challenges
+description: Understanding challenge types, categories, and structure in GZCTF
+---
+
+Challenges are the core problems that participants solve in CTF competitions. GZCTF supports multiple challenge types to accommodate different scenarios and requirements.
+
+## Challenge Types
+
+GZCTF provides four distinct challenge types, each designed for specific use cases:
+
+### Static Attachment
+
+Static attachment challenges use shared files and flags across all teams.
+
+<Info>
+  **Use case**: Traditional challenges where all teams work with the same files and submit the same flag.
+</Info>
+
+**Characteristics:**
+- Single attachment file shared by all teams
+- Any configured flag can be accepted
+- No team-specific differentiation
+- Ideal for reverse engineering, cryptography, and forensics challenges
+
+### Dynamic Attachment
+
+Dynamic attachment challenges distribute unique attachments and flags to each team.
+
+<Warning>
+  The number of flags and attachments must be at least equal to the number of participating teams.
+</Warning>
+
+**Characteristics:**
+- Each team receives a unique attachment
+- Flags are distributed according to teams
+- Prevents flag sharing between teams
+- Suitable for challenges requiring flag uniqueness
+
+### Static Container
+
+Static container challenges use shared Docker containers without dynamic flag generation.
+
+**Characteristics:**
+- All teams use the same container template
+- No dynamic flags issued
+- Any configured flag can be submitted
+- Container resource limits apply
+
+**Container Configuration:**
+- **Memory Limit**: Default 64 MB
+- **Storage Limit**: Default 256 MB
+- **CPU Count**: Default 0.1 CPUs (1 = 1 CPU core)
+- **Exposed Port**: Default port 80
+
+### Dynamic Container
+
+Dynamic container challenges automatically generate unique flags for each team via container environment variables.
+
+<Info>
+  Flags are generated using the flag template and passed to containers as environment variables at runtime.
+</Info>
+
+**Characteristics:**
+- Each team receives a unique container instance
+- Flags are automatically generated and unique per team
+- Prevents flag sharing
+- Supports traffic capture for monitoring
+
+**Network Modes:**
+- **Open**: Container can access external networks including the internet
+- **Isolated**: Container cannot access external networks (internal only)
+- **Custom**: Uses user-defined network configuration (Docker network or K8s label)
+
+## Challenge Categories
+
+GZCTF supports the following challenge categories:
+
+<CardGroup cols={3}>
+  <Card title="Misc" icon="question" />
+  <Card title="Crypto" icon="lock" />
+  <Card title="Pwn" icon="bug" />
+  <Card title="Web" icon="globe" />
+  <Card title="Reverse" icon="arrows-rotate" />
+  <Card title="Blockchain" icon="link" />
+  <Card title="Forensics" icon="magnifying-glass" />
+  <Card title="Hardware" icon="microchip" />
+  <Card title="Mobile" icon="mobile" />
+  <Card title="PPC" icon="code" />
+  <Card title="AI" icon="brain" />
+  <Card title="Pentest" icon="shield" />
+  <Card title="OSINT" icon="eye" />
+</CardGroup>
+
+## Challenge Properties
+
+### Basic Information
+
+| Property | Description |
+|----------|-------------|
+| **Title** | Challenge name (required) |
+| **Content** | Challenge description and instructions (required) |
+| **Category** | Challenge category (default: Misc) |
+| **Type** | Challenge type - cannot be changed after creation |
+| **IsEnabled** | Whether the challenge is currently active |
+| **Hints** | Optional list of hints for participants |
+
+### Constraints
+
+**Deadline**
+
+Challenges can have an optional deadline. After the deadline, submissions are no longer accepted.
+
+```cs
+DateTimeOffset? DeadlineUtc
+```
+
+**Submission Limit**
+
+Limit the number of flag submissions per team. Set to `0` for unlimited submissions.
+
+```cs
+int SubmissionLimit // 0 = no limit
+```
+
+### Container Challenges
+
+For container-based challenges, additional properties are available:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `ContainerImage` | - | Docker image name and tag |
+| `MemoryLimit` | 64 MB | Memory allocation |
+| `StorageLimit` | 256 MB | Disk storage |
+| `CPUCount` | 1 (0.1 CPU) | CPU allocation in 0.1 CPU units |
+| `ExposePort` | 80 | Container port to expose |
+| `NetworkMode` | Open | Network isolation level |
+
+## Flag Templates
+
+Dynamic challenges use flag templates to generate unique flags for each team.
+
+<CodeGroup>
+```text Example Template
+flag{[TEAM_HASH]_welcome_to_gzctf}
+```
+
+```text Generated Flag
+flag{a1b2c3d4e5f6_welcome_to_gzctf}
+```
+</CodeGroup>
+
+The `[TEAM_HASH]` placeholder is replaced with a team-specific hash generated from:
+- Game's team hash salt
+- Challenge ID
+- Team participation token
+
+<Tip>
+  Flag templates support leet speak transformations and custom placeholders for advanced use cases.
+</Tip>
+
+## Challenge Model Reference
+
+The Challenge model is located at:
+
+```
+~/workspace/source/src/GZCTF/Models/Data/Challenge.cs
+```
+
+<Accordion title="View Challenge Model Structure">
+```cs
+public class Challenge
+{
+    public int Id { get; set; }
+    public string Title { get; set; }
+    public string Content { get; set; }
+    public ChallengeCategory Category { get; set; }
+    public ChallengeType Type { get; set; }
+    public List<string>? Hints { get; set; }
+    public bool IsEnabled { get; set; }
+    public DateTimeOffset? DeadlineUtc { get; set; }
+    public int SubmissionLimit { get; set; }
+    
+    // Container properties
+    public string? ContainerImage { get; set; }
+    public int? MemoryLimit { get; set; }  // MB
+    public int? StorageLimit { get; set; } // MB
+    public int? CPUCount { get; set; }     // 0.1 CPUs
+    public int? ExposePort { get; set; }
+    public NetworkMode? NetworkMode { get; set; }
+    
+    // Flag configuration
+    public string? FlagTemplate { get; set; }
+    public string? FileName { get; set; }
+    
+    // Relationships
+    public Attachment? Attachment { get; set; }
+    public Container? TestContainer { get; set; }
+    public List<FlagContext> Flags { get; set; }
+}
+```
+</Accordion>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Dynamic Scoring" icon="chart-line" href="/concepts/scoring">
+    Learn how challenge scores decrease as more teams solve them
+  </Card>
+  <Card title="Container Management" icon="docker" href="/concepts/containers">
+    Understand container lifecycle and management
+  </Card>
+  <Card title="Games" icon="trophy" href="/concepts/games">
+    Explore how challenges are organized in games
+  </Card>
+  <Card title="Teams" icon="users" href="/concepts/teams">
+    See how teams participate in challenges
+  </Card>
+</CardGroup>

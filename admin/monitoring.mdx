@@ -1,0 +1,670 @@
+---
+title: Competition Monitoring
+description: Real-time monitoring, event tracking, and cheat detection
+icon: chart-line
+---
+
+GZCTF provides comprehensive monitoring tools to track competition progress, detect anomalies, and ensure fair play.
+
+## Real-Time Monitoring Dashboard
+
+The monitoring dashboard provides live insights into competition activity.
+
+<Info>
+  Users with **Monitor** role have read-only access to monitoring features without admin capabilities.
+</Info>
+
+### Accessing Monitor View
+
+<Steps>
+  <Step title="Navigate to Game">
+    Open the game you want to monitor from admin panel
+  </Step>
+  
+  <Step title="Open Monitor View">
+    Click **Monitor** button to access real-time dashboard
+  </Step>
+  
+  <Step title="Connect to Event Stream">
+    Dashboard connects to SignalR hub for live updates
+  </Step>
+</Steps>
+
+<CodeGroup>
+```javascript SignalR Connection
+// Frontend connects to MonitorHub
+const connection = new signalR.HubConnectionBuilder()
+  .withUrl(`/hub/monitor?game=${gameId}`, {
+    accessTokenFactory: () => token
+  })
+  .build();
+
+await connection.start();
+
+// Receive real-time events
+connection.on('ReceivedSubmission', (submission) => {
+  console.log('New submission:', submission);
+});
+```
+</CodeGroup>
+
+## Event Types
+
+GZCTF tracks various event types during competitions:
+
+<CardGroup cols={2}>
+  <Card title="Flag Submissions" icon="flag">
+    Track every flag attempt:
+    - Team identifier
+    - Challenge name
+    - Result (correct/incorrect)
+    - Timestamp
+  </Card>
+  
+  <Card title="Container Events" icon="cube">
+    Monitor container lifecycle:
+    - Container creation
+    - Extension/renewal
+    - Destruction
+    - Resource usage
+  </Card>
+  
+  <Card title="Team Actions" icon="users">
+    Track team activities:
+    - Challenge unlocks
+    - Hint requests
+    - Writeup submissions
+  </Card>
+  
+  <Card title="System Events" icon="server">
+    Platform operations:
+    - Game state changes
+    - Admin actions
+    - Notice publications
+  </Card>
+</CardGroup>
+
+### Event History
+
+Retrieve historical events for analysis:
+
+<CodeGroup>
+```javascript Get Game Events
+GET /api/game/{id}/events?hideContainer=false&count=100&skip=0
+
+// Parameters:
+// - hideContainer: filter out container events
+// - count: events per page
+// - skip: pagination offset
+
+// Response:
+[
+  {
+    "id": 1,
+    "type": "FlagSubmit",
+    "teamId": 42,
+    "challengeId": 10,
+    "status": "Accepted",
+    "answer": "flag{***}",
+    "time": "2024-03-01T10:30:00Z"
+  }
+]
+```
+</CodeGroup>
+
+<ParamField path="hideContainer" type="boolean" default={false}>
+  Filter out container-related events to focus on gameplay
+</ParamField>
+
+## Submission Monitoring
+
+Track all flag submission attempts across the competition.
+
+### Submission Status Types
+
+<AccordionGroup>
+  <Accordion title="Accepted" icon="check" iconType="solid">
+    Correct flag - team earns points
+  </Accordion>
+  
+  <Accordion title="WrongAnswer" icon="times" iconType="solid">
+    Incorrect flag attempt
+  </Accordion>
+  
+  <Accordion title="CheatDetected" icon="shield" iconType="solid">
+    Flag from another team detected (duplicate flag)
+  </Accordion>
+  
+  <Accordion title="NotFound" icon="question" iconType="solid">
+    Challenge or flag doesn't exist
+  </Accordion>
+  
+  <Accordion title="Duplicate" icon="copy" iconType="solid">
+    Team already solved this challenge
+  </Accordion>
+  
+  <Accordion title="Expired" icon="clock" iconType="solid">
+    Submission after challenge deadline
+  </Accordion>
+  
+  <Accordion title="SubmissionLimitExceeded" icon="ban" iconType="solid">
+    Team exceeded submission limit for challenge
+  </Accordion>
+</AccordionGroup>
+
+### Viewing Submissions
+
+<Tabs>
+  <Tab title="By Game">
+    ```javascript
+    GET /api/game/{id}/submissions?type=Accepted&count=100&skip=0
+    
+    // Get all submissions for a game
+    // Filter by type (optional)
+    ```
+  </Tab>
+  
+  <Tab title="By Challenge">
+    ```javascript
+    GET /api/game/{gameId}/challenges/{challengeId}/submissions
+    
+    // Get submissions for specific challenge
+    ```
+  </Tab>
+  
+  <Tab title="By Team">
+    ```javascript
+    GET /api/game/{gameId}/teams/{teamId}/submissions
+    
+    // Get all submissions from a team
+    ```
+  </Tab>
+</Tabs>
+
+### Submission Details
+
+Each submission record contains:
+
+```typescript
+interface Submission {
+  id: number;
+  gameId: number;
+  challengeId: number;
+  teamId: number;
+  userId: string;
+  submitTime: string;        // ISO timestamp
+  answer: string;            // Submitted flag (masked)
+  status: AnswerResult;      // Result status
+  challengeName: string;
+  teamName: string;
+  userName: string;
+}
+```
+
+<Warning>
+  Flag values are partially masked in API responses to prevent leakage. Full flags are only visible in database.
+</Warning>
+
+## Cheat Detection
+
+GZCTF includes automated cheat detection for flag sharing.
+
+### How It Works
+
+<Steps>
+  <Step title="Flag Tracking">
+    System maintains mapping of which team received which dynamic flag
+  </Step>
+  
+  <Step title="Cross-Team Detection">
+    When team submits a flag:
+    1. Check if flag belongs to another team
+    2. If yes → mark as `CheatDetected`
+    3. Log incident for admin review
+  </Step>
+  
+  <Step title="Alert Generation">
+    Cheat events are:
+    - Highlighted in submission stream
+    - Logged to admin event log
+    - Available for export/analysis
+  </Step>
+</Steps>
+
+<Info>
+  Cheat detection only works for **dynamic flags** (Dynamic Container/Attachment challenges).
+</Info>
+
+### Investigating Cheating
+
+<Steps>
+  <Step title="Filter Cheat Submissions">
+    ```javascript
+    GET /api/game/{id}/submissions?type=CheatDetected
+    
+    // Returns all detected cheating attempts
+    ```
+  </Step>
+  
+  <Step title="Analyze Patterns">
+    Look for:
+    - Repeated attempts between same teams
+    - Timing correlation (submissions within seconds)
+    - Team relationships
+  </Step>
+  
+  <Step title="Take Action">
+    Based on findings:
+    - Warn teams
+    - Suspend participations
+    - Disqualify if confirmed
+  </Step>
+</Steps>
+
+<CodeGroup>
+```javascript Example: Cheat Analysis
+// Get cheat attempts for game
+const cheats = await fetch('/api/game/1/submissions?type=CheatDetected')
+  .then(r => r.json());
+
+// Group by team pairs
+const pairs = cheats.reduce((acc, cheat) => {
+  const key = `${cheat.teamId}->${cheat.flagOwnerId}`;
+  acc[key] = (acc[key] || 0) + 1;
+  return acc;
+}, {});
+
+console.log('Team flag sharing pairs:', pairs);
+// Output: { "42->17": 3, "42->23": 1 }
+// Team 42 submitted flags from teams 17 (3x) and 23 (1x)
+```
+</CodeGroup>
+
+## Container Monitoring
+
+Track container instances and resource usage.
+
+### Active Containers
+
+View all running containers:
+
+<CodeGroup>
+```javascript Get Container Instances
+GET /api/admin/instances
+
+// Response:
+[
+  {
+    "id": "container-guid",
+    "teamId": "team-hash",
+    "challengeId": 5,
+    "challengeName": "Web Challenge",
+    "image": "gzctf/web-chall:latest",
+    "status": "Running",
+    "startTime": "2024-03-01T10:00:00Z",
+    "expectStopTime": "2024-03-01T12:00:00Z",
+    "ip": "10.244.0.5",
+    "port": "32001",
+    "publicEntry": "https://gzctf.com:32001"
+  }
+]
+```
+</CodeGroup>
+
+### Container Lifecycle Events
+
+Track container operations:
+
+<CardGroup cols={3}>
+  <Card title="Created" icon="play" color="#00AA00">
+    Container successfully started
+  </Card>
+  
+  <Card title="Extended" icon="clock-rotate-left" color="#0088FF">
+    Lifetime renewed by team
+  </Card>
+  
+  <Card title="Destroyed" icon="trash" color="#FF0000">
+    Container stopped/removed
+  </Card>
+</CardGroup>
+
+### Forced Container Destruction
+
+Admins can manually destroy containers:
+
+<CodeGroup>
+```javascript Destroy Container
+DELETE /api/admin/instances/{containerId}
+
+// Forcibly stops and removes container
+// Use for stuck containers or rule violations
+```
+</CodeGroup>
+
+<Warning>
+  Destroying a container:
+  - Terminates the running service immediately
+  - Loses any ephemeral data inside
+  - Teams must recreate to continue
+</Warning>
+
+## Traffic Capture
+
+For challenges with traffic capture enabled, monitor network activity.
+
+### Accessing Captures
+
+<Steps>
+  <Step title="Enable Capture">
+    Set `EnableTrafficCapture: true` on challenge
+  </Step>
+  
+  <Step title="Container Activity">
+    All network traffic is captured as PCAP files
+  </Step>
+  
+  <Step title="Download PCAP">
+    Retrieve capture files for forensic analysis
+  </Step>
+</Steps>
+
+<Info>
+  Traffic captures are useful for:
+  - Investigating exploits
+  - Understanding attack vectors
+  - Detecting automated scanners
+  - Educational purposes
+</Info>
+
+## Scoreboard Monitoring
+
+Track competition standings in real-time.
+
+### Scoreboard Cache
+
+GZCTF caches scoreboard for performance:
+
+<ParamField path="Cache TTL" type="duration" default="2 minutes">
+  Scoreboard refreshes every 2 minutes during competition
+</ParamField>
+
+<CodeGroup>
+```javascript Flush Scoreboard Cache
+POST /api/edit/games/{id}/scoreboard/flush
+
+// Force immediate scoreboard recalculation
+// Use after:
+// - Participation status changes
+// - Manual score adjustments
+// - Challenge enable/disable
+```
+</CodeGroup>
+
+### Scoreboard Data
+
+Scoreboard includes:
+
+```typescript
+interface Scoreboard {
+  teams: TeamScore[];
+  challenges: ChallengeSummary[];
+  topTimeline: TimelineEvent[];
+}
+
+interface TeamScore {
+  id: number;
+  name: string;
+  organization: string;
+  rank: number;
+  score: number;
+  solvedCount: number;
+  lastSubmitTime: string;
+  solvedChallenges: number[];  // Challenge IDs
+}
+```
+
+## System Logs
+
+Access platform-wide system logs:
+
+<CodeGroup>
+```javascript Get System Logs
+GET /api/admin/logs?level=Warning&count=100&skip=0
+
+// Filter by log level:
+// - All (default)
+// - Debug
+// - Information  
+// - Warning
+// - Error
+// - Critical
+
+// Response:
+[
+  {
+    "time": "2024-03-01T10:00:00Z",
+    "level": "Warning",
+    "userName": "admin",
+    "ip": "192.168.1.1",
+    "message": "Container creation took 5.2 seconds",
+    "status": "Success"
+  }
+]
+```
+</CodeGroup>
+
+<Accordion title="Log Levels Explained">
+  - **Debug**: Verbose information for troubleshooting
+  - **Information**: Normal operations (user login, challenge solve)
+  - **Warning**: Potential issues (slow operations, rate limits)
+  - **Error**: Failures (container errors, DB timeouts)
+  - **Critical**: Severe issues (system crash, data loss)
+</Accordion>
+
+## Real-Time Event Streaming
+
+### SignalR Hubs
+
+GZCTF uses SignalR for real-time communication:
+
+<CardGroup cols={2}>
+  <Card title="MonitorHub" icon="eye">
+    Real-time game events for monitors/admins:
+    - Flag submissions
+    - Container events
+    - Team actions
+    
+    **Endpoint**: `/hub/monitor?game={gameId}`
+  </Card>
+  
+  <Card title="AdminHub" icon="user-shield">
+    Platform-wide events for admins:
+    - System logs
+    - User actions
+    - Configuration changes
+    
+    **Endpoint**: `/hub/admin`
+  </Card>
+</CardGroup>
+
+### Connection Example
+
+<CodeGroup>
+```typescript Monitor Connection
+import * as signalR from '@microsoft/signalr';
+
+const monitorConnection = new signalR.HubConnectionBuilder()
+  .withUrl(`/hub/monitor?game=${gameId}`, {
+    accessTokenFactory: () => getAuthToken()
+  })
+  .withAutomaticReconnect()
+  .build();
+
+// Register event handlers
+monitorConnection.on('ReceivedSubmission', (submission) => {
+  updateSubmissionList(submission);
+});
+
+monitorConnection.on('ReceivedGameEvent', (event) => {
+  updateEventLog(event);
+});
+
+await monitorConnection.start();
+console.log('Connected to monitor hub');
+```
+
+```typescript Admin Connection
+const adminConnection = new signalR.HubConnectionBuilder()
+  .withUrl('/hub/admin', {
+    accessTokenFactory: () => getAuthToken()
+  })
+  .withAutomaticReconnect()
+  .build();
+
+adminConnection.on('ReceivedLog', (log) => {
+  appendToLogViewer(log);
+});
+
+await adminConnection.start();
+console.log('Connected to admin hub');
+```
+</CodeGroup>
+
+<Info>
+  SignalR connections require authentication. Pass JWT token via `accessTokenFactory`.
+</Info>
+
+## Performance Metrics
+
+Monitor platform performance:
+
+<CardGroup cols={2}>
+  <Card title="Response Time" icon="gauge">
+    Track API latency and slow endpoints
+  </Card>
+  
+  <Card title="Container Stats" icon="server">
+    Monitor:
+    - Active containers
+    - Creation time
+    - Resource usage
+  </Card>
+  
+  <Card title="Database Load" icon="database">
+    Query performance and connection pool
+  </Card>
+  
+  <Card title="Cache Hit Rate" icon="bolt">
+    Redis cache effectiveness
+  </Card>
+</CardGroup>
+
+<Tip>
+  Enable telemetry (Prometheus/OpenTelemetry) in configuration for detailed metrics.
+</Tip>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Monitor Actively" icon="eye">
+    During competitions:
+    - Watch submission stream
+    - Check for unusual patterns
+    - Respond to issues quickly
+  </Card>
+  
+  <Card title="Investigate Anomalies" icon="magnifying-glass">
+    Look for:
+    - Burst of failures from one team
+    - Identical submission patterns
+    - Container creation spikes
+  </Card>
+  
+  <Card title="Export Data" icon="download">
+    Regularly export:
+    - Event logs
+    - Submission history
+    - Traffic captures
+  </Card>
+  
+  <Card title="Review Post-Game" icon="chart-line">
+    After competition:
+    - Analyze solve times
+    - Review cheat alerts
+    - Identify bottlenecks
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Real-time updates not working">
+    Check:
+    - WebSocket connection is established
+    - No firewall blocking WebSocket
+    - Auth token is valid
+    - Hub connection logs for errors
+  </Accordion>
+  
+  <Accordion title="Scoreboard not updating">
+    Try:
+    - Flush scoreboard cache
+    - Check if submissions are being recorded
+    - Verify Redis connection
+  </Accordion>
+  
+  <Accordion title="Container events missing">
+    Verify:
+    - Container provider is running
+    - Event logging is enabled
+    - Database is accessible
+  </Accordion>
+  
+  <Accordion title="High system load">
+    Investigate:
+    - Number of active containers
+    - Database query performance
+    - Cache hit rates
+    - Consider scaling infrastructure
+  </Accordion>
+</AccordionGroup>
+
+## API Reference
+
+<AccordionGroup>
+  <Accordion title="Event Endpoints">
+    - `GET /api/game/{id}/events` - Get game events
+  </Accordion>
+  
+  <Accordion title="Submission Endpoints">
+    - `GET /api/game/{id}/submissions` - Get game submissions
+    - `GET /api/game/{gameId}/challenges/{challengeId}/submissions` - Challenge submissions
+  </Accordion>
+  
+  <Accordion title="Container Endpoints">
+    - `GET /api/admin/instances` - List all containers
+    - `DELETE /api/admin/instances/{id}` - Destroy container
+  </Accordion>
+  
+  <Accordion title="Log Endpoints">
+    - `GET /api/admin/logs` - Get system logs
+  </Accordion>
+  
+  <Accordion title="SignalR Hubs">
+    - `/hub/monitor?game={gameId}` - Game monitoring
+    - `/hub/admin` - Admin events
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/admin/configurations">
+    Configure platform settings
+  </Card>
+  
+  <Card title="Creating Games" icon="trophy" href="/admin/creating-games">
+    Create new competitions
+  </Card>
+</CardGroup>

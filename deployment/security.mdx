@@ -1,0 +1,572 @@
+---
+title: Security Considerations
+description: Security best practices and configuration for production GZCTF deployments
+---
+
+This guide covers security considerations and best practices for deploying GZCTF in a production environment.
+
+## HTTPS and TLS
+
+<Warning>
+Always use HTTPS in production. Never expose GZCTF directly to the internet over HTTP.
+</Warning>
+
+### Reverse Proxy HTTPS Termination
+
+GZCTF runs on HTTP internally (port 8080). Use a reverse proxy for HTTPS termination:
+
+<CodeGroup>
+
+```nginx Nginx
+server {
+    listen 443 ssl http2;
+    server_name ctf.example.com;
+
+    # SSL/TLS Configuration
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Request size limit
+    client_max_body_size 64M;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        
+        # WebSocket support (required for SignalR)
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Forwarded headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    server_name ctf.example.com;
+    return 301 https://$server_name$request_uri;
+}
+```
+
+```caddyfile Caddy
+ctf.example.com {
+    # Automatic HTTPS with Let's Encrypt
+    
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+    
+    # Request size limit
+    request_body {
+        max_size 64MB
+    }
+    
+    reverse_proxy localhost:8080
+    encode gzip zstd
+}
+```
+
+```yaml Kubernetes Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gzctf
+  namespace: gzctf
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ctf.example.com
+      secretName: gzctf-tls
+  rules:
+    - host: ctf.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gzctf
+                port:
+                  number: 8080
+```
+
+</CodeGroup>
+
+### Configure Forwarded Headers
+
+When behind a reverse proxy, configure GZCTF to trust forwarded headers:
+
+```bash
+# Trust forwarded headers
+GZCTF_ForwardedOptions__ForwardedHeaders="XForwardedFor,XForwardedProto"
+
+# Specify known proxy IPs
+GZCTF_ForwardedOptions__KnownProxies__0="172.18.0.1"
+GZCTF_ForwardedOptions__KnownProxies__1="10.0.0.1"
+
+# Or specify trusted networks (CIDR)
+GZCTF_ForwardedOptions__KnownIPNetworks__0="10.0.0.0/8"
+GZCTF_ForwardedOptions__KnownIPNetworks__1="172.16.0.0/12"
+
+# Limit forwarding depth
+GZCTF_ForwardedOptions__ForwardLimit="1"
+```
+
+<Note>
+Forwarded headers configuration (ForwardedOptions.cs:554) allows flexible proxy network configuration. The application processes these headers via `app.UseForwardedHeaders()` middleware.
+</Note>
+
+## Authentication and Authorization
+
+### Cookie Security
+
+GZCTF uses cookie-based authentication with the following security features:
+
+- **Cookie name**: `GZCTF_Token`
+- **Sliding expiration**: 7 days
+- **HttpOnly**: Enabled by default
+- **Secure flag**: Automatically set when using HTTPS
+- **SameSite**: Configured based on environment
+
+### Password Policy
+
+Default password requirements (configured in IdentityExtension.cs:29):
+
+- No special character requirement by default
+- Unique email addresses required
+- Username can contain any characters
+
+**Customize password requirements:**
+
+For stricter password policies, you need to modify the IdentityCore configuration in the source code:
+
+```csharp
+options.Password.RequireDigit = true;
+options.Password.RequiredLength = 12;
+options.Password.RequireNonAlphanumeric = true;
+options.Password.RequireUppercase = true;
+options.Password.RequireLowercase = true;
+```
+
+### Email Confirmation
+
+<Warning>
+For production deployments, always enable email confirmation to prevent abuse.
+</Warning>
+
+```bash
+GZCTF_AccountPolicy__EmailConfirmationRequired="true"
+GZCTF_AccountPolicy__ActiveOnRegister="false"
+```
+
+Email confirmation tokens expire after 3 hours (DataProtectionTokenProviderOptions).
+
+### Role-Based Access Control
+
+GZCTF implements hierarchical role-based access control:
+
+- **Admin** (3): Full system access
+- **Monitor** (1): Read-only access to monitoring features
+- **User** (0): Standard user permissions
+- **Banned** (-1): Blocked from accessing the platform
+
+Roles are enforced via authorization attributes:
+- `[RequireAdmin]` - Admin only
+- `[RequireMonitor]` - Admin or Monitor
+- `[RequireUser]` - Any authenticated user
+- `[RequireAdminOrToken]` - Admin or valid API token
+
+### API Token Authentication
+
+GZCTF supports API tokens for programmatic access using Ed25519 signatures:
+
+- Tokens are signed with Ed25519 private keys
+- Keys are stored encrypted in the database (XOR with machine key)
+- Token verification uses public keys
+
+<Note>
+API tokens provide an alternative authentication method for automation and integrations.
+</Note>
+
+## CAPTCHA Protection
+
+<Warning>
+Enable CAPTCHA to prevent automated abuse, especially for public-facing CTF platforms.
+</Warning>
+
+### Hash Proof-of-Work (Default)
+
+Client-side computational challenge that doesn't require external services:
+
+```bash
+GZCTF_AccountPolicy__UseCaptcha="true"
+GZCTF_CaptchaConfig__Provider="HashPow"
+GZCTF_CaptchaConfig__HashPow__Difficulty="18"  # Range: 8-48
+```
+
+**Difficulty guidance:**
+- **8-12**: Very easy, minimal protection
+- **16-20**: Moderate, good for most cases
+- **24-32**: Difficult, strong protection
+- **36-48**: Very difficult, may impact user experience
+
+### Cloudflare Turnstile
+
+Modern, privacy-focused CAPTCHA alternative:
+
+```bash
+GZCTF_AccountPolicy__UseCaptcha="true"
+GZCTF_CaptchaConfig__Provider="CloudflareTurnstile"
+GZCTF_CaptchaConfig__SiteKey="your-site-key"
+GZCTF_CaptchaConfig__SecretKey="your-secret-key"
+```
+
+## Rate Limiting
+
+GZCTF includes comprehensive rate limiting (RateLimiter.cs:51) to prevent abuse:
+
+### Global Rate Limits
+
+- **Authenticated users**: 150 requests/minute with 60 queued
+- **Anonymous users**: 150 requests/minute per IP with 60 queued
+- **Sliding window**: 6 segments (10-second windows)
+
+### Endpoint-Specific Limits
+
+- **Registration**: 20 requests per 150 seconds
+- **Database queries**: Token bucket (100 tokens, +10 every 10s)
+- **Container operations**: Token bucket (120 tokens, +30 every 10s)
+- **Flag submission**: Token bucket (100 tokens, +50 every 5s)
+- **CAPTCHA challenges**: Token bucket (40 tokens, +5 every 30s)
+- **Concurrency**: 1 concurrent request for critical operations
+
+### Disable Rate Limiting
+
+<Warning>
+Disabling rate limiting is not recommended for production!
+</Warning>
+
+```bash
+GZCTF_DisableRateLimit="true"
+```
+
+## Database Security
+
+### Connection String Security
+
+<Warning>
+Never commit database credentials to version control. Use environment variables or secrets management.
+</Warning>
+
+**Docker Compose:**
+
+```yaml
+services:
+  gzctf:
+    environment:
+      - GZCTF_ConnectionStrings__Database=${DB_CONNECTION_STRING}
+```
+
+**Kubernetes:**
+
+```yaml
+env:
+  - name: GZCTF_ConnectionStrings__Database
+    valueFrom:
+      secretKeyRef:
+        name: gzctf-secret
+        key: database-connection
+```
+
+### PostgreSQL Security Best Practices
+
+1. **Use strong passwords**: Generate cryptographically secure passwords
+2. **Restrict network access**: Limit PostgreSQL to internal networks only
+3. **Enable SSL/TLS**: Encrypt database connections
+4. **Regular backups**: Automated, encrypted backups
+5. **Update regularly**: Keep PostgreSQL updated with security patches
+
+```bash
+# Example with SSL enforcement
+GZCTF_ConnectionStrings__Database="Host=db;Database=gzctf;Username=gzctf;Password=...*;SSL Mode=Require;Trust Server Certificate=false"
+```
+
+### Data Protection
+
+GZCTF uses ASP.NET Core Data Protection for:
+
+- Authentication cookie encryption
+- Email confirmation tokens
+- Password reset tokens
+- Anti-forgery tokens
+
+Keys are automatically persisted to the `DataProtectionKeys` table in PostgreSQL (IdentityExtension.cs:12).
+
+## Container Security
+
+### Docker Socket Security
+
+<Warning>
+Mounting the Docker socket gives GZCTF full control over the Docker daemon. This is a security risk.
+</Warning>
+
+**Mitigation strategies:**
+
+1. **Use Kubernetes**: Kubernetes provides better isolation and RBAC
+2. **Dedicated Docker host**: Run GZCTF on a dedicated Docker host
+3. **Network isolation**: Isolate challenge containers on separate networks
+4. **Resource limits**: Set CPU/memory limits on containers
+
+### Kubernetes RBAC
+
+When using Kubernetes, GZCTF uses RBAC to limit permissions:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gzctf-container-manager
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "create", "delete"]
+```
+
+**Security recommendations:**
+
+1. **Dedicated namespace**: Isolate challenge containers in `gzctf-challenges` namespace
+2. **Network policies**: Restrict challenge container network access
+3. **Resource quotas**: Limit resources per namespace
+4. **Pod security standards**: Apply restricted pod security standards
+
+### Challenge Container Isolation
+
+**Network isolation:**
+
+```bash
+# Kubernetes: Restrict CIDR ranges
+GZCTF_ContainerProvider__KubernetesConfig__AllowCidr__0="10.0.0.0/8"
+GZCTF_ContainerProvider__KubernetesConfig__AllowCidr__1="172.16.0.0/12"
+
+# Docker: Use dedicated network
+GZCTF_ContainerProvider__DockerConfig__ChallengeNetwork="gzctf-challenges"
+```
+
+**Resource limits:**
+
+Set resource limits in challenge definitions to prevent resource exhaustion attacks.
+
+## Storage Security
+
+### S3 Bucket Security
+
+When using S3 storage:
+
+1. **Private buckets**: Never make buckets public
+2. **IAM policies**: Use least-privilege IAM policies
+3. **Encryption at rest**: Enable S3 server-side encryption
+4. **Encryption in transit**: Always use HTTPS
+5. **Access logging**: Enable S3 access logs
+6. **Versioning**: Enable versioning for recovery
+
+```json S3 Bucket Policy Example
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GZCTFAccess",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::123456789012:user/gzctf"
+      },
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::gzctf-bucket/*",
+        "arn:aws:s3:::gzctf-bucket"
+      ]
+    }
+  ]
+}
+```
+
+### Local File Storage Security
+
+1. **Restrict permissions**: Ensure only GZCTF process can access files
+2. **Regular backups**: Implement automated backup strategy
+3. **Separate volume**: Use dedicated volume/partition
+4. **Disk encryption**: Enable full-disk encryption
+
+```bash
+# Set proper ownership
+chown -R 1000:1000 /app/files
+chmod -R 750 /app/files
+```
+
+## Redis Security
+
+When using Redis:
+
+1. **Authentication**: Always set a strong password
+2. **Network isolation**: Bind to internal network only
+3. **Disable dangerous commands**: `rename-command CONFIG ""` in redis.conf
+4. **TLS encryption**: Use Redis TLS for encryption in transit
+
+```bash
+# Redis with authentication
+GZCTF_ConnectionStrings__RedisCache="redis:6379,password=strong-redis-password,ssl=true,abortConnect=false"
+```
+
+## Monitoring and Auditing
+
+### Enable Comprehensive Logging
+
+```bash
+# Grafana Loki
+GZCTF_GrafanaLokiOptions__Enable="true"
+GZCTF_GrafanaLokiOptions__EndpointUri="http://loki:3100"
+
+# OpenTelemetry
+GZCTF_Telemetry__OpenTelemetry__Enable="true"
+GZCTF_Telemetry__OpenTelemetry__EndpointUri="http://otel-collector:4317"
+```
+
+### Health Monitoring
+
+Monitor the health endpoint:
+
+```bash
+curl http://localhost:3000/healthz
+```
+
+Health checks include:
+- Database connectivity
+- Storage availability
+- Redis connectivity (if configured)
+
+### Audit Logging
+
+GZCTF logs security-relevant events:
+
+- User registration and login attempts
+- Admin actions
+- Flag submissions
+- Container creation/deletion
+- Configuration changes
+
+Logs are structured and include:
+- User ID
+- IP address
+- Action type
+- Timestamp
+- Success/failure status
+
+## Security Checklist
+
+Before going to production:
+
+- [ ] HTTPS enabled with valid TLS certificate
+- [ ] Strong, unique passwords for all services (database, Redis, email)
+- [ ] Email confirmation enabled
+- [ ] CAPTCHA configured and enabled
+- [ ] Rate limiting enabled (DisableRateLimit not set)
+- [ ] Forwarded headers properly configured
+- [ ] Database connections encrypted (SSL mode)
+- [ ] Storage backend secured (private bucket or restricted file permissions)
+- [ ] Redis authentication enabled (if using Redis)
+- [ ] Regular automated backups configured
+- [ ] Monitoring and alerting configured
+- [ ] Container isolation properly configured
+- [ ] Resource limits set for challenge containers
+- [ ] Security headers configured in reverse proxy
+- [ ] HSTS enabled
+- [ ] Regular security updates scheduled
+
+## Incident Response
+
+### Suspicious Activity
+
+If you detect suspicious activity:
+
+1. **Review logs**: Check application and access logs
+2. **Identify affected accounts**: Use admin panel or database queries
+3. **Revoke sessions**: Delete sessions from Redis or restart application
+4. **Ban malicious users**: Use role system to ban users
+5. **Update credentials**: Rotate database and service passwords if compromised
+
+### Data Breach
+
+In case of a data breach:
+
+1. **Isolate the system**: Take affected services offline
+2. **Assess the damage**: Determine what data was accessed
+3. **Notify users**: Inform affected users according to regulations
+4. **Reset credentials**: Force password reset for all users
+5. **Review and patch**: Identify and fix the vulnerability
+6. **Monitor closely**: Watch for further suspicious activity
+
+## Security Updates
+
+Stay up to date with security patches:
+
+```bash
+# Check for updates
+docker pull gztime/gzctf:latest
+
+# Always backup before updating
+./backup.sh
+
+# Update GZCTF
+docker compose up -d
+```
+
+## Reporting Security Issues
+
+If you discover a security vulnerability in GZCTF:
+
+1. **Do not** create a public GitHub issue
+2. Email the maintainers privately
+3. Provide detailed information about the vulnerability
+4. Allow time for a fix before public disclosure
+
+## Next Steps
+
+- [Configuration Reference](/deployment/configuration) - Detailed configuration options
+- [Docker Deployment](/deployment/docker) - Deploy with Docker
+- [Kubernetes Deployment](/deployment/kubernetes) - Deploy on Kubernetes

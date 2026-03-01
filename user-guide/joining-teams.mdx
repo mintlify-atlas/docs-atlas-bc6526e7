@@ -1,0 +1,258 @@
+---
+title: Teams
+description: Create teams, join existing teams, and manage team membership
+icon: users
+---
+
+## Overview
+
+GZCTF uses a team-based system for CTF participation. Users can create teams, join existing teams, or play solo (as a team of one). Teams are required to participate in games.
+
+## Creating a Team
+
+Each user can create up to **3 teams** where they are the captain.
+
+<Steps>
+  <Step title="Navigate to Teams">
+    Go to the Teams section in your user dashboard.
+  </Step>
+  
+  <Step title="Create New Team">
+    Click "Create Team" and provide:
+    - **Team Name**: Your team's display name (required)
+    - **Bio**: Optional team description
+    
+    <Note>
+      Team names must be unique across the platform.
+    </Note>
+  </Step>
+  
+  <Step title="Team Created">
+    You'll be automatically set as the team captain and can now:
+    - Invite members
+    - Update team information
+    - Register for games
+  </Step>
+</Steps>
+
+<Warning>
+  You cannot create more than 3 teams. If you've reached the limit, you must delete an existing team or transfer ownership first.
+</Warning>
+
+## Joining a Team
+
+There are two ways to join an existing team:
+
+<Tabs>
+  <Tab title="Invitation Code">
+    Team captains can share an invitation code with you.
+    
+    ### Invitation Code Format
+    
+    ```
+    TeamName:123:a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+    ```
+    
+    The code contains:
+    - Team name
+    - Team ID
+    - Invitation token (32-character hash)
+    
+    ### Joining Process
+    
+    <Steps>
+      <Step title="Get Invitation Code">
+        Receive the invitation code from the team captain.
+      </Step>
+      
+      <Step title="Accept Invitation">
+        Go to Teams → Join Team and paste the invitation code.
+      </Step>
+      
+      <Step title="Join Team">
+        Click "Join" to become a team member immediately.
+        
+        <Info>
+          You'll see a success message: "Successfully joined [Team Name]"
+        </Info>
+      </Step>
+    </Steps>
+    
+    <Warning>
+      - You cannot join a team you're already a member of
+      - The invitation token must match the current valid token
+      - Team captains can regenerate tokens to invalidate old invitations
+    </Warning>
+  </Tab>
+  
+  <Tab title="Direct Request">
+    Some platforms may allow direct join requests (implementation-dependent).
+    
+    Contact the team captain directly to request membership.
+  </Tab>
+</Tabs>
+
+## Team Management
+
+### As Team Captain
+
+Team captains have full control over their teams:
+
+#### Get Invitation Code
+
+```http
+GET /api/Team/{teamId}/Invite
+```
+
+Retrieve the current invitation code to share with potential members.
+
+#### Regenerate Invitation Token
+
+```http
+PUT /api/Team/{teamId}/Invite
+```
+
+Generate a new invitation token, invalidating all previous invitation codes.
+
+<Info>
+  Use this to revoke outstanding invitations or enhance security.
+</Info>
+
+#### Update Team Information
+
+- **Team Name**: Rename your team
+- **Bio**: Update team description
+- **Avatar**: Upload team logo (max 3MB, resized to 300x300)
+
+#### Kick Members
+
+Remove members from your team:
+
+<Warning>
+  You cannot kick members while the team is locked during an active game.
+</Warning>
+
+```http
+POST /api/Team/{teamId}/Kick/{userId}
+```
+
+#### Transfer Ownership
+
+Transfer team captain status to another member:
+
+<Steps>
+  <Step title="Select New Captain">
+    Choose a current team member to become the new captain.
+  </Step>
+  
+  <Step title="Verify Eligibility">
+    The new captain must have fewer than 3 teams where they are captain.
+  </Step>
+  
+  <Step title="Complete Transfer">
+    Ownership is transferred immediately and cannot be undone.
+    
+    <Warning>
+      You will no longer have captain privileges after the transfer.
+    </Warning>
+  </Step>
+</Steps>
+
+#### Delete Team
+
+Permanently delete your team:
+
+<Warning>
+  - You cannot delete a team during an active game
+  - This action cannot be undone
+  - All team data and participation history will be removed
+</Warning>
+
+### As Team Member
+
+#### Leave Team
+
+You can leave any team you're a member of:
+
+```http
+POST /api/Team/{teamId}/Leave
+```
+
+<Note>
+  You cannot leave a team that's locked during an active game.
+</Note>
+
+#### View Team Information
+
+Access your team details:
+- Team members and their roles
+- Team statistics
+- Participation history
+
+## Team Locking
+
+Teams become **locked** during active game participation:
+
+- **Locked Status**: Team roster cannot be modified
+- **Triggers**: Joining a game with accepted participation
+- **Restrictions**:
+  - Cannot kick members
+  - Cannot leave team
+  - Cannot delete team
+
+<Info>
+  Locking prevents roster changes during competition to ensure fairness.
+</Info>
+
+## Team Limits
+
+| Limit | Value |
+|-------|-------|
+| Teams per user (as captain) | 3 |
+| Team name length | Variable |
+| Team bio length | Variable |
+| Avatar file size | 3 MB |
+| Members per team | No hard limit* |
+
+<Note>
+  *Game-specific member limits may apply when joining competitions. See [Participating in Games](/user-guide/participating).
+</Note>
+
+## Common Issues
+
+### "You have exceeded the team creation limit"
+
+**Solution**: You can only create 3 teams. Delete an existing team or transfer ownership to free up a slot.
+
+### "Team is locked"
+
+**Solution**: Wait until the active game ends. Teams are locked during competition.
+
+### "Invalid invitation code"
+
+**Causes**:
+- Invitation token was regenerated
+- Code was copied incorrectly
+- Team no longer exists
+
+**Solution**: Request a new invitation code from the team captain.
+
+### "User not in team"
+
+**Solution**: Verify you're a member of the team before attempting team operations.
+
+## API Reference
+
+<Info>
+  Team operations are available at `/api/Team/*`. See TeamController.cs for implementation details.
+</Info>
+
+### Key Endpoints
+
+- `POST /api/Team` - Create team (TeamController.cs:76-116)
+- `POST /api/Team/Accept` - Join team via invitation (TeamController.cs:352-417)
+- `PUT /api/Team/{id}` - Update team info (TeamController.cs:120-155)
+- `GET /api/Team/{id}/Invite` - Get invitation code (TeamController.cs:217-247)
+- `POST /api/Team/{id}/Kick/{userId}` - Remove member (TeamController.cs:287-346)
+- `POST /api/Team/{id}/Leave` - Leave team (TeamController.cs:420-472)
+- `DELETE /api/Team/{id}` - Delete team (TeamController.cs:528-565)

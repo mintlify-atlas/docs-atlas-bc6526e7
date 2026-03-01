@@ -1,0 +1,479 @@
+---
+title: 'Game API'
+description: 'Game management and participation endpoints'
+icon: 'gamepad'
+---
+
+## Overview
+
+The Game API provides endpoints for retrieving game information, joining games, submitting flags, and managing game participation.
+
+## Public Endpoints
+
+### Get Recent Games
+
+Retrieve games from the last three weeks.
+
+#### GET /api/game/recent
+
+<ParamField query="limit" type="integer" default="0">
+  Maximum number of games to return (0-50, 0 = all)
+</ParamField>
+
+<ResponseExample>
+```json Response
+[
+  {
+    "id": 1,
+    "title": "Spring CTF 2026",
+    "summary": "Annual spring competition",
+    "poster": "/assets/posters/abc123.jpg",
+    "startTimeUtc": "2026-03-15T08:00:00Z",
+    "endTimeUtc": "2026-03-17T20:00:00Z",
+    "participantCount": 156
+  }
+]
+```
+</ResponseExample>
+
+<Note>
+  This endpoint supports ETag caching. Include `If-None-Match` header for efficient polling.
+</Note>
+
+### Get Games List
+
+Retrieve paginated list of games.
+
+#### GET /api/game
+
+<ParamField query="count" type="integer" default="10">
+  Number of games to return (max 50)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Number of games to skip
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "id": 1,
+      "title": "Spring CTF 2026",
+      "poster": "/assets/posters/abc123.jpg",
+      "startTimeUtc": "2026-03-15T08:00:00Z",
+      "endTimeUtc": "2026-03-17T20:00:00Z"
+    }
+  ],
+  "total": 25,
+  "count": 10,
+  "skip": 0
+}
+```
+</ResponseExample>
+
+### Get Game Details
+
+Retrieve detailed information about a specific game.
+
+#### GET /api/game/{id}
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "id": 1,
+  "title": "Spring CTF 2026",
+  "summary": "Annual spring CTF competition",
+  "description": "Detailed description...",
+  "poster": "/assets/posters/abc123.jpg",
+  "startTimeUtc": "2026-03-15T08:00:00Z",
+  "endTimeUtc": "2026-03-17T20:00:00Z",
+  "writeupRequired": true,
+  "writeupDeadline": "2026-03-24T23:59:59Z",
+  "inviteCode": null,
+  "participantCount": 156,
+  "divisions": [],
+  "teamMemberCountLimit": 4,
+  "organizations": ["University A", "College B"]
+}
+```
+</ResponseExample>
+
+## Participation
+
+### Join Game
+
+Join a game with a team.
+
+#### POST /api/game/{id}
+
+<Note>Requires User authentication and team membership.</Note>
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ParamField body="teamId" type="integer" required>
+  ID of the team to join with
+</ParamField>
+
+<ParamField body="divisionId" type="integer">
+  Division ID (required if game has joinable divisions)
+</ParamField>
+
+<ParamField body="inviteCode" type="string">
+  Invitation code (if required by game or division)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "teamId": 42,
+  "divisionId": 1,
+  "inviteCode": "SECRET123"
+}
+```
+</ResponseExample>
+
+<Expandable title="Response Codes">
+  - `200` - Successfully joined game
+  - `400` - Invalid request (e.g., already in another team, team full, wrong division)
+  - `403` - Forbidden (e.g., not team member, invalid invite code)
+  - `404` - Game or team not found
+</Expandable>
+
+### Leave Game
+
+Leave a game participation.
+
+#### DELETE /api/game/{id}
+
+<Note>Requires User authentication. Can only leave if participation is pending or rejected.</Note>
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+### Get Game Details (Authenticated)
+
+Retrieve challenges and team information for joined games.
+
+#### GET /api/game/{id}/details
+
+<Note>Requires User authentication and active participation.</Note>
+
+<ResponseExample>
+```json Response
+{
+  "scoreboardItem": {
+    "id": 42,
+    "name": "Team Alpha",
+    "avatar": "/assets/avatars/team42.jpg",
+    "rank": 5,
+    "score": 2500,
+    "solvedCount": 15
+  },
+  "teamToken": "12345:a1b2c3d4e5f6...",
+  "challenges": [
+    {
+      "id": 1,
+      "title": "Web Challenge",
+      "category": "Web",
+      "score": 100,
+      "solvedCount": 45,
+      "bloods": []
+    }
+  ],
+  "challengeCount": 20,
+  "writeupRequired": true,
+  "writeupDeadline": "2026-03-24T23:59:59Z"
+}
+```
+</ResponseExample>
+
+## Challenge Operations
+
+### Get Challenge
+
+Retrieve detailed information about a challenge.
+
+#### GET /api/game/{id}/challenges/{challengeId}
+
+<Note>Requires User authentication and game participation.</Note>
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ParamField path="challengeId" type="integer" required>
+  Challenge ID
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "id": 1,
+  "title": "Web Challenge",
+  "category": "Web",
+  "description": "Find the flag in the web application...",
+  "score": 100,
+  "hints": ["Check the cookies", "Look at the source code"],
+  "context": {
+    "instanceEntry": "http://challenge-instance.ctf.local:8080",
+    "closeTime": "2026-03-15T12:30:00Z"
+  },
+  "attachments": [
+    {
+      "type": "Local",
+      "url": "/files/challenges/abc123.zip"
+    }
+  ],
+  "attempts": 3,
+  "deadlineUtc": null,
+  "submissionLimit": 0
+}
+```
+</ResponseExample>
+
+### Submit Flag
+
+Submit a flag for a challenge.
+
+#### POST /api/game/{id}/challenges/{challengeId}
+
+<Note>Rate limited. Requires User authentication and game participation.</Note>
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ParamField path="challengeId" type="integer" required>
+  Challenge ID
+</ParamField>
+
+<ParamField body="flag" type="string" required>
+  Flag answer (may require encryption, max 127 characters)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "flag": "flag{example_flag_here}"
+}
+```
+
+```json Response
+12345
+```
+</ResponseExample>
+
+<Info>
+  The response is the submission ID. Use the status endpoint to check if the flag is correct.
+</Info>
+
+### Check Submission Status
+
+Query the status of a flag submission.
+
+#### GET /api/game/{id}/challenges/{challengeId}/status/{submitId}
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ParamField path="challengeId" type="integer" required>
+  Challenge ID
+</ParamField>
+
+<ParamField path="submitId" type="integer" required>
+  Submission ID from flag submission
+</ParamField>
+
+<ResponseField name="status" type="string">
+  Submission result: `FlagSubmitted`, `Accepted`, `WrongAnswer`, etc.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+"Accepted"
+```
+</ResponseExample>
+
+## Scoreboard
+
+### Get Scoreboard
+
+Retrieve the game scoreboard.
+
+#### GET /api/game/{id}/scoreboard
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "updateTimeUtc": "2026-03-15T14:30:00Z",
+  "divisions": {},
+  "challenges": [
+    {
+      "id": 1,
+      "title": "Web Challenge",
+      "category": "Web",
+      "score": 100,
+      "solvedCount": 45
+    }
+  ],
+  "items": {
+    "42": {
+      "id": 42,
+      "name": "Team Alpha",
+      "avatar": "/assets/avatars/team42.jpg",
+      "rank": 1,
+      "score": 3500,
+      "solvedCount": 18,
+      "challenges": {
+        "1": {
+          "type": "FirstBlood",
+          "score": 100,
+          "submitTimeUtc": "2026-03-15T08:05:00Z"
+        }
+      }
+    }
+  }
+}
+```
+</ResponseExample>
+
+<Note>
+  Scoreboard data is cached and supports ETag headers for efficient updates.
+</Note>
+
+## Game Notices
+
+### Get Notices
+
+Retrieve game announcements and notices.
+
+#### GET /api/game/{id}/notices
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ParamField query="count" type="integer" default="100">
+  Number of notices to return (max 100)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Number of notices to skip
+</ParamField>
+
+<ResponseExample>
+```json Response
+[
+  {
+    "id": 1,
+    "type": "Normal",
+    "values": ["Welcome to Spring CTF 2026!"],
+    "publishTimeUtc": "2026-03-15T08:00:00Z"
+  },
+  {
+    "id": 2,
+    "type": "NewChallenge",
+    "values": ["Crypto Master"],
+    "publishTimeUtc": "2026-03-15T10:00:00Z"
+  }
+]
+```
+</ResponseExample>
+
+## Writeups
+
+### Get Writeup Info
+
+Retrieve writeup submission information.
+
+#### GET /api/game/{id}/writeup
+
+<Note>Requires User authentication and game participation.</Note>
+
+<ResponseExample>
+```json Response
+{
+  "submitted": true,
+  "uploadTimeUtc": "2026-03-20T15:30:00Z",
+  "fileSize": 2048576,
+  "url": "/files/writeups/game1_team42.pdf"
+}
+```
+</ResponseExample>
+
+### Submit Writeup
+
+Submit a post-game writeup (PDF only).
+
+#### POST /api/game/{id}/writeup
+
+<Note>Requires User authentication. Only PDF files up to 20MB accepted.</Note>
+
+<ParamField body="file" type="file" required>
+  PDF writeup file
+</ParamField>
+
+## Monitor Endpoints
+
+<Warning>The following endpoints require Monitor or Admin permissions.</Warning>
+
+### Get Game Events
+
+#### GET /api/game/{id}/events
+
+<ParamField query="hideContainer" type="boolean" default="false">
+  Hide container-related events
+</ParamField>
+
+<ParamField query="count" type="integer" default="100">
+  Number of events (max 100)
+</ParamField>
+
+### Get Submissions
+
+#### GET /api/game/{id}/submissions
+
+<ParamField query="type" type="string">
+  Filter by answer result (e.g., `Accepted`, `WrongAnswer`)
+</ParamField>
+
+<ParamField query="count" type="integer" default="100">
+  Number of submissions (max 100)
+</ParamField>
+
+### Download Scoreboard
+
+#### GET /api/game/{id}/scoreboardsheet
+
+Downloads an Excel file with complete scoreboard data.
+
+### Download Submissions
+
+#### GET /api/game/{id}/submissionsheet
+
+Downloads an Excel file with all game submissions.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Challenge API" icon="puzzle-piece" href="/api/challenge">
+    Challenge management endpoints
+  </Card>
+  <Card title="Team API" icon="users" href="/api/team">
+    Team operations
+  </Card>
+</CardGroup>

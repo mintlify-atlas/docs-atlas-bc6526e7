@@ -1,80 +1,244 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with GZCTF in minutes - from account creation to your first CTF challenge
 ---
 
-## Get started in three steps
+This guide will walk you through setting up your account, joining a team, and participating in your first CTF competition on GZCTF.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have:
+- A valid email address for account verification
+- Basic understanding of CTF competitions
+- A team to join or create (you can create your own)
+
+## Account registration
+
+<Steps>
+  <Step title="Navigate to registration page">
+    Visit your GZCTF instance and click the **Register** button. You'll need to provide:
+    - Username (unique identifier)
+    - Email address (for verification)
+    - Password (strong password recommended)
+  </Step>
+
+  <Step title="Complete CAPTCHA verification">
+    Complete the Cloudflare Turnstile CAPTCHA challenge to prevent automated registrations.
+  </Step>
+
+  <Step title="Verify your email">
+    Check your email inbox for a verification link. Click the link to activate your account.
+    
+    <Note>
+    If email verification is disabled by the administrator, your account will be active immediately.
+    </Note>
+  </Step>
+
+  <Step title="Wait for admin approval (if required)">
+    Some instances require administrator approval for new accounts. You'll receive an email once approved.
+  </Step>
+
+  <Step title="Log in">
+    Once your account is activated, log in with your credentials.
+  </Step>
+</Steps>
+
+## Create or join a team
+
+<Steps>
+  <Step title="Navigate to teams">
+    After logging in, go to the **Teams** section in the navigation menu.
+  </Step>
+
+  <Step title="Create a new team or join existing">
+    <Tabs>
+      <Tab title="Create a team">
+        Click **Create Team** and provide:
+        - Team name
+        - Optional team bio
+        - Team avatar (optional)
+        
+        <Info>
+        You can create up to 3 teams where you are the captain.
+        </Info>
+      </Tab>
+      
+      <Tab title="Join existing team">
+        If you have an invitation code from a team captain:
+        1. Click **Join Team**
+        2. Enter the 32-character invitation code
+        3. Click **Submit**
+        
+        You'll be added to the team immediately.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Configure team settings (captains only)">
+    Team captains can:
+    - Generate/regenerate invitation codes
+    - Remove team members
+    - Update team information
+    - Transfer team ownership
+  </Step>
+</Steps>
+
+## Join a competition
+
+<Steps>
+  <Step title="Browse available games">
+    Navigate to the **Games** page to see upcoming and active CTF competitions.
+  </Step>
+
+  <Step title="Select a game">
+    Click on a game to view details:
+    - Competition description
+    - Start and end times
+    - Participation rules
+    - Available divisions (if any)
+  </Step>
+
+  <Step title="Register for the game">
+    Click **Join Game** and:
+    - Select your team
+    - Choose a division (if applicable)
+    - Accept any competition rules
+    
+    <Warning>
+    Some competitions require administrator approval before you can participate.
+    </Warning>
+  </Step>
+
+  <Step title="Wait for the competition to start">
+    Once registered, wait for the competition start time. You'll be notified when it begins.
+  </Step>
+</Steps>
+
+## Solve your first challenge
+
+<Steps>
+  <Step title="Browse challenges">
+    When the competition is active, navigate to the **Challenges** tab to see available challenges organized by category.
+  </Step>
+
+  <Step title="Select a challenge">
+    Click on a challenge to view:
+    - Challenge description
+    - Hints (if provided)
+    - Point value
+    - Solve count
+  </Step>
+
+  <Step title="Start container instance (if needed)">
+    For dynamic container challenges:
+    1. Click **Start Instance**
+    2. Wait for the container to be created
+    3. Note the connection details (IP, port)
+    
+    <Info>
+    Container instances have a lifetime limit. You can extend them if needed.
+    </Info>
+  </Step>
+
+  <Step title="Download attachments (if available)">
+    Some challenges provide downloadable files. Click the download button to get them.
+  </Step>
+
+  <Step title="Solve the challenge">
+    Use the challenge description, hints, and any provided resources to find the flag.
+    
+    Flags typically follow a format like:
+    ```
+    flag{some_secret_text_here}
+    ```
+  </Step>
+
+  <Step title="Submit the flag">
+    Enter the flag in the submission box and click **Submit**.
+    
+    You'll see immediate feedback:
+    - ✅ **Correct**: Points added to your team score
+    - ❌ **Incorrect**: No points awarded, try again
+    - ⏱️ **Rate Limited**: Wait before submitting again
+  </Step>
+</Steps>
+
+## Monitor your progress
+
+Track your team's performance throughout the competition:
+
+<CardGroup cols={2}>
+  <Card title="Scoreboard" icon="trophy">
+    View real-time rankings and scores for all teams
+  </Card>
+  
+  <Card title="Challenge Status" icon="list-check">
+    See which challenges you've solved and which are still pending
+  </Card>
+  
+  <Card title="Team Stats" icon="chart-line">
+    Monitor your team's solve times and points
+  </Card>
+  
+  <Card title="Blood Bonuses" icon="star">
+    First three teams to solve earn bonus points (5%, 3%, 1%)
+  </Card>
+</CardGroup>
+
+## Post-competition
+
+After the competition ends:
+
+1. **Submit writeups**: Document your solutions and submit them for review
+2. **Review scoreboard**: See final rankings and statistics
+3. **Practice mode**: Continue solving challenges in practice mode (if enabled)
+
+## Best practices
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+  <Accordion title="Team collaboration" icon="users">
+    - Communicate with your team using external chat tools
+    - Divide challenges by skill areas (web, crypto, pwn, etc.)
+    - Share discoveries and approaches
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+
+  <Accordion title="Time management" icon="clock">
+    - Start with challenges in your area of expertise
+    - Don't spend too long on a single challenge
+    - Monitor the scoreboard to prioritize high-value targets
   </Accordion>
-</AccordionGroup>
 
-### Step 2: Deploy your changes
+  <Accordion title="Technical tips" icon="code">
+    - Keep notes of your findings
+    - Save important commands and scripts
+    - Test your flags before submitting
+    - Monitor container instance lifetimes
+  </Accordion>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
+  <Accordion title="Fair play" icon="shield">
+    - Don't share flags between teams
+    - Don't attack the platform infrastructure
+    - Follow the competition rules
+    - Report any technical issues to administrators
   </Accordion>
 </AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Core Concepts" icon="book" href="/concepts/challenges">
+    Learn about challenge types and scoring
+  </Card>
+  
+  <Card title="User Guide" icon="user" href="/user-guide/registration">
+    Detailed guides for all platform features
+  </Card>
+  
+  <Card title="Installation" icon="download" href="/installation">
+    Deploy your own GZCTF instance
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Integrate with the GZCTF API
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

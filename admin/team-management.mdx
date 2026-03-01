@@ -1,0 +1,657 @@
+---
+title: Team Management
+description: Manage teams, participants, and competition divisions
+icon: users
+---
+
+Team management encompasses handling team registrations, user accounts, participation approvals, and division assignments.
+
+## Team Overview
+
+Teams are groups of users collaborating in CTF competitions. Each team can participate in multiple games.
+
+<Info>
+  Teams can have 1 to N members depending on game settings. A team with one member is essentially a solo player.
+</Info>
+
+## Viewing Teams
+
+<Steps>
+  <Step title="Access Team Management">
+    Navigate to **Admin Panel** → **Teams**
+  </Step>
+  
+  <Step title="Browse Team List">
+    View paginated list of all teams with:
+    - Team name
+    - Captain information
+    - Member count
+    - Organization/affiliation
+  </Step>
+  
+  <Step title="Search Teams">
+    Use the search function to find teams by:
+    - Team name
+    - Member names
+    - Email addresses
+  </Step>
+</Steps>
+
+<CodeGroup>
+```javascript API: Get Teams
+GET /api/admin/teams?count=100&skip=0
+
+// Response
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "TeamName",
+      "captain": {
+        "id": "user-guid",
+        "userName": "captain_user"
+      },
+      "members": [...],
+      "organization": "University"
+    }
+  ],
+  "total": 150
+}
+```
+
+```javascript API: Search Teams
+POST /api/admin/teams/search?hint=teamname
+
+// Returns matching teams
+```
+</CodeGroup>
+
+## Editing Team Information
+
+Admins can modify team properties:
+
+<ParamField path="Name" type="string">
+  Team display name
+</ParamField>
+
+<ParamField path="Bio" type="string">
+  Team biography or description
+</ParamField>
+
+<ParamField path="Organization" type="string">
+  Affiliated organization, school, or company
+</ParamField>
+
+<ParamField path="Locked" type="boolean">
+  Lock team to prevent members from joining/leaving during competition
+</ParamField>
+
+<Steps>
+  <Step title="Select Team">
+    Click on team name in the team list
+  </Step>
+  
+  <Step title="Edit Properties">
+    Modify team information as needed
+  </Step>
+  
+  <Step title="Save Changes">
+    Changes apply immediately
+  </Step>
+</Steps>
+
+<CodeGroup>
+```javascript Update Team
+PUT /api/admin/teams/{id}
+
+{
+  "name": "Updated Team Name",
+  "bio": "We are awesome",
+  "organization": "GZCTF University",
+  "locked": false
+}
+```
+</CodeGroup>
+
+## User Management
+
+### Viewing Users
+
+Access complete user directory:
+
+<Steps>
+  <Step title="Navigate to Users">
+    Go to **Admin Panel** → **Users**
+  </Step>
+  
+  <Step title="Browse User List">
+    View all registered users with:
+    - Username
+    - Email
+    - Real name
+    - Registration date
+    - Role (User/Monitor/Admin)
+  </Step>
+</Steps>
+
+### User Roles
+
+<CardGroup cols={3}>
+  <Card title="User" icon="user">
+    Standard participant with access to:
+    - Game participation
+    - Challenge solving
+    - Team creation/joining
+  </Card>
+  
+  <Card title="Monitor" icon="eye">
+    Observer role with access to:
+    - Real-time event monitoring
+    - Submission viewing
+    - Scoreboard insights
+    - No management capabilities
+  </Card>
+  
+  <Card title="Admin" icon="user-shield">
+    Full platform control:
+    - Game creation
+    - Challenge management
+    - User/team management
+    - System configuration
+  </Card>
+</CardGroup>
+
+### Editing User Information
+
+<ParamField path="UserName" type="string">
+  Unique username (used for login)
+</ParamField>
+
+<ParamField path="Email" type="string">
+  User email address (must be unique)
+</ParamField>
+
+<ParamField path="RealName" type="string">
+  User's full name
+</ParamField>
+
+<ParamField path="StdNumber" type="string">
+  Student ID or employee number
+</ParamField>
+
+<ParamField path="PhoneNumber" type="string">
+  Contact phone number
+</ParamField>
+
+<ParamField path="EmailConfirmed" type="boolean">
+  Mark email as verified
+</ParamField>
+
+<ParamField path="Role" type="enum">
+  User role: `User`, `Monitor`, or `Admin`
+</ParamField>
+
+<CodeGroup>
+```javascript Update User
+PUT /api/admin/users/{userId}
+
+{
+  "userName": "new_username",
+  "email": "user@example.com",
+  "realName": "John Doe",
+  "stdNumber": "2024001",
+  "phoneNumber": "+1234567890",
+  "emailConfirmed": true,
+  "role": "User"
+}
+```
+</CodeGroup>
+
+### Batch User Creation
+
+Create multiple users at once:
+
+<Steps>
+  <Step title="Prepare User Data">
+    Format user list as JSON array:
+    ```json
+    [
+      {
+        "userName": "user1",
+        "password": "SecurePass123!",
+        "email": "user1@example.com",
+        "realName": "User One",
+        "teamName": "Team Alpha"
+      },
+      {
+        "userName": "user2",
+        "password": "SecurePass456!",
+        "email": "user2@example.com",
+        "realName": "User Two",
+        "teamName": "Team Alpha"
+      }
+    ]
+    ```
+  </Step>
+  
+  <Step title="Submit Batch">
+    ```javascript
+    POST /api/admin/users
+    
+    // System creates users and teams automatically
+    // Users with same teamName join same team
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Batch creation automatically handles:
+  - User account creation
+  - Team creation (if new)
+  - Team membership assignment
+  - Duplicate detection
+</Tip>
+
+### User Actions
+
+<AccordionGroup>
+  <Accordion title="Reset Password" icon="key">
+    ```javascript
+    DELETE /api/admin/users/{userId}/password
+    
+    // Returns new temporary password
+    // User should change on next login
+    ```
+  </Accordion>
+  
+  <Accordion title="Delete User" icon="trash">
+    Permanently remove user account.
+    
+    <Warning>
+      Cannot delete:
+      - Your own admin account
+      - Team captains (transfer captaincy first)
+    </Warning>
+    
+    ```javascript
+    DELETE /api/admin/users/{userId}
+    ```
+  </Accordion>
+  
+  <Accordion title="Search Users" icon="magnifying-glass">
+    Find users by partial match on:
+    - Username
+    - Email
+    - Real name
+    - Phone number
+    - Student number
+    
+    ```javascript
+    POST /api/admin/users/search?hint=john
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Participation Management
+
+Participations represent team registrations for specific games.
+
+### Participation Status
+
+<CardGroup cols={3}>
+  <Card title="Pending" icon="clock" color="#FFA500">
+    Awaiting admin approval
+  </Card>
+  
+  <Card title="Accepted" icon="check" color="#00AA00">
+    Approved to participate
+  </Card>
+  
+  <Card title="Rejected" icon="times" color="#FF0000">
+    Registration denied
+  </Card>
+  
+  <Card title="Suspended" icon="ban" color="#888888">
+    Temporarily banned from game
+  </Card>
+  
+  <Card title="Unsubmitted" icon="file" color="#666666">
+    Incomplete registration
+  </Card>
+</CardGroup>
+
+### Approving Registrations
+
+<Steps>
+  <Step title="View Pending Registrations">
+    Navigate to game → **Participants** → filter by status **Pending**
+  </Step>
+  
+  <Step title="Review Application">
+    Check team:
+    - Eligibility
+    - Division selection
+    - Team composition
+  </Step>
+  
+  <Step title="Approve or Reject">
+    Update participation status:
+    ```javascript
+    PUT /api/admin/participation/{id}
+    
+    {
+      "status": "Accepted",
+      "divisionId": 2  // Optional: assign division
+    }
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  If game has `AcceptWithoutReview` enabled, teams are automatically accepted.
+</Info>
+
+### Managing Participations
+
+<ParamField path="Status" type="enum">
+  Change participation status:
+  - `Pending` → `Accepted`: Approve registration
+  - `Accepted` → `Suspended`: Temporarily ban team
+  - `Suspended` → `Accepted`: Reinstate team
+  - Any → `Rejected`: Deny access
+</ParamField>
+
+<ParamField path="DivisionId" type="integer">
+  Assign or change team's division
+</ParamField>
+
+<Warning>
+  Changing participation status affects:
+  - Team's ability to access challenges
+  - Scoreboard visibility
+  - Container allocations (destroyed on suspension/rejection)
+</Warning>
+
+### Suspending Teams
+
+Temporarily ban teams for violations:
+
+<Steps>
+  <Step title="Identify Violation">
+    Use monitoring tools to detect:
+    - Flag sharing
+    - Automated attacks
+    - Rule violations
+  </Step>
+  
+  <Step title="Suspend Participation">
+    Change status to `Suspended`:
+    ```javascript
+    PUT /api/admin/participation/{id}
+    
+    {
+      "status": "Suspended"
+    }
+    ```
+  </Step>
+  
+  <Step title="Document Reason">
+    Keep internal records of suspension reasons for appeals
+  </Step>
+</Steps>
+
+<Info>
+  Suspended teams:
+  - Cannot access challenges
+  - Are hidden from scoreboard
+  - Have all containers destroyed
+  - Can be reinstated by changing status back to `Accepted`
+</Info>
+
+## Division Management
+
+Divisions separate competition tracks within a game.
+
+### Creating Divisions
+
+<Steps>
+  <Step title="Navigate to Game Divisions">
+    Open game → **Settings** → **Divisions**
+  </Step>
+  
+  <Step title="Add Division">
+    ```javascript
+    POST /api/edit/games/{id}/divisions
+    
+    {
+      "name": "University Students",
+      "description": "Open to currently enrolled university students"
+    }
+    ```
+  </Step>
+  
+  <Step title="Configure Division">
+    Each division maintains separate:
+    - Scoreboard
+    - Rankings
+    - Blood bonuses
+  </Step>
+</Steps>
+
+### Assigning Teams to Divisions
+
+Two methods:
+
+1. **Self-Selection**: Teams choose division during registration
+2. **Admin Assignment**: Admins override division via participation management
+
+<CodeGroup>
+```javascript Admin Override
+PUT /api/admin/participation/{id}
+
+{
+  "divisionId": 3
+}
+
+// Moves team to division #3
+```
+</CodeGroup>
+
+### Managing Divisions
+
+<AccordionGroup>
+  <Accordion title="Update Division" icon="pen">
+    ```javascript
+    PUT /api/edit/games/{id}/divisions/{divisionId}
+    
+    {
+      "name": "Updated Name",
+      "description": "Updated description"
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Delete Division" icon="trash">
+    Remove division (teams move to default/no division):
+    ```javascript
+    DELETE /api/edit/games/{id}/divisions/{divisionId}
+    ```
+  </Accordion>
+  
+  <Accordion title="View Division Scoreboard" icon="ranking-star">
+    Each division has isolated scoreboard accessible via game interface
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  Deleting a division doesn't delete teams or participations—it just removes the division grouping.
+</Warning>
+
+## Team Actions
+
+### Deleting Teams
+
+Permanently remove team:
+
+<Warning>
+  This action:
+  - Deletes team and all participations
+  - Removes team members' associations
+  - Does NOT delete user accounts
+  - Cannot be undone
+</Warning>
+
+<CodeGroup>
+```javascript Delete Team
+DELETE /api/admin/teams/{id}
+
+// Team members become team-less users
+// Can join or create new teams
+```
+</CodeGroup>
+
+### Locking Teams
+
+Prevent roster changes during competition:
+
+<ParamField path="Locked" type="boolean">
+  When locked, teams cannot:
+  - Add new members
+  - Remove members
+  - Change captain
+</ParamField>
+
+<Tip>
+  Lock teams after registration closes to prevent mid-competition roster manipulation.
+</Tip>
+
+## Writeup Management
+
+If game requires writeups:
+
+<Steps>
+  <Step title="View Submissions">
+    ```javascript
+    GET /api/admin/writeups/{gameId}
+    
+    // Returns list of all writeup submissions
+    ```
+  </Step>
+  
+  <Step title="Download All Writeups">
+    ```javascript
+    GET /api/admin/writeups/{gameId}/all
+    
+    // Downloads ZIP archive of all writeups
+    ```
+  </Step>
+  
+  <Step title="Review Content">
+    Evaluate writeup quality before making public
+  </Step>
+</Steps>
+
+<Info>
+  Writeups are stored as uploaded (PDF/Markdown) and can be bulk downloaded for archival or judging.
+</Info>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Pre-Approve Teams" icon="bolt">
+    For better experience:
+    - Enable `AcceptWithoutReview` for public games
+    - Manually review only for private/serious competitions
+  </Card>
+  
+  <Card title="Monitor Registrations" icon="radar">
+    Regularly check:
+    - Pending approvals
+    - Team sizes vs limits
+    - Division distribution
+  </Card>
+  
+  <Card title="Document Decisions" icon="book">
+    Keep records of:
+    - Suspension reasons
+    - Division overrides
+    - Special accommodations
+  </Card>
+  
+  <Card title="Lock Before Start" icon="lock">
+    Lock team rosters before game starts to prevent:
+    - Mid-game team hopping
+    - Circumventing suspensions
+    - Roster manipulation
+  </Card>
+</CardGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Team can't register">
+    Check:
+    - Team size doesn't exceed game limit
+    - All members have verified emails (if required)
+    - Correct invitation code (if required)
+    - Game registration is open
+  </Accordion>
+  
+  <Accordion title="Cannot delete team">
+    Ensure:
+    - Team has no active participations (remove them first)
+    - You're not deleting your own team while admin
+  </Accordion>
+  
+  <Accordion title="User can't be deleted">
+    Verify:
+    - User is not you (can't delete yourself)
+    - User is not a team captain (transfer captaincy first)
+  </Accordion>
+  
+  <Accordion title="Division changes not reflected">
+    Try:
+    - Flush scoreboard cache
+    - Verify participation status is `Accepted`
+    - Refresh page
+  </Accordion>
+</AccordionGroup>
+
+## API Reference
+
+<AccordionGroup>
+  <Accordion title="Team Endpoints">
+    - `GET /api/admin/teams` - List all teams
+    - `POST /api/admin/teams/search` - Search teams
+    - `PUT /api/admin/teams/{id}` - Update team
+    - `DELETE /api/admin/teams/{id}` - Delete team
+  </Accordion>
+  
+  <Accordion title="User Endpoints">
+    - `GET /api/admin/users` - List all users
+    - `POST /api/admin/users` - Batch create users
+    - `POST /api/admin/users/search` - Search users
+    - `GET /api/admin/users/{id}` - Get user details
+    - `PUT /api/admin/users/{id}` - Update user
+    - `DELETE /api/admin/users/{id}` - Delete user
+    - `DELETE /api/admin/users/{id}/password` - Reset password
+  </Accordion>
+  
+  <Accordion title="Participation Endpoints">
+    - `PUT /api/admin/participation/{id}` - Update participation
+    - `GET /api/admin/writeups/{gameId}` - Get writeups
+    - `GET /api/admin/writeups/{gameId}/all` - Download all writeups
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="chart-line" href="/admin/monitoring">
+    Monitor competition in real-time
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/admin/configurations">
+    Configure platform settings
+  </Card>
+</CardGroup>

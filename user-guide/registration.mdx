@@ -1,0 +1,169 @@
+---
+title: User Registration
+description: Register for a GZCTF account and complete email verification
+icon: user-plus
+---
+
+## Overview
+
+GZCTF provides a secure registration system for new users. Depending on the platform configuration, registration may require email verification and admin approval.
+
+## Registration Process
+
+<Steps>
+  <Step title="Navigate to Registration">
+    Go to the GZCTF platform and click on the registration or sign-up page.
+  </Step>
+  
+  <Step title="Fill Registration Form">
+    Provide the following information:
+    - **Username**: Your desired username for the platform
+    - **Email**: A valid email address (must match allowed domains if configured)
+    - **Password**: A secure password (transmitted encrypted)
+    
+    <Note>
+      Passwords are encrypted on the client-side before transmission to protect your credentials.
+    </Note>
+  </Step>
+  
+  <Step title="Complete CAPTCHA">
+    If Cloudflare Turnstile protection is enabled, complete the CAPTCHA verification to prove you're human.
+    
+    <Info>
+      CAPTCHA protection helps prevent automated bot registrations and abuse.
+    </Info>
+  </Step>
+  
+  <Step title="Submit Registration">
+    Click the submit button to create your account. The system will validate:
+    - Username and email are not already taken
+    - Email domain is allowed (if domain restrictions are configured)
+    - Password meets security requirements
+  </Step>
+</Steps>
+
+## Registration Outcomes
+
+After submitting your registration, one of three outcomes will occur:
+
+<Tabs>
+  <Tab title="Immediate Access">
+    If the platform is configured with `ActiveOnRegister`, you'll be automatically logged in:
+    
+    ```
+    ✓ Registration successful - You are now logged in
+    ```
+    
+    You can immediately start using the platform.
+  </Tab>
+  
+  <Tab title="Email Verification Required">
+    If email confirmation is required, you'll receive a verification email:
+    
+    ```
+    ✓ Registration successful - Please check your email for verification
+    ```
+    
+    **Email Verification Steps:**
+    1. Check your inbox for the verification email
+    2. Click the verification link (format: `/account/verify?token=...&email=...`)
+    3. Your email will be confirmed and you'll be automatically logged in
+    
+    <Warning>
+      In development mode, the verification link is logged to the console instead of being sent via email.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Admin Approval Required">
+    If admin approval is required, you'll see:
+    
+    ```
+    ✓ Registration successful - Awaiting administrator approval
+    ```
+    
+    An administrator must manually approve your account before you can log in.
+  </Tab>
+</Tabs>
+
+## Email Domain Restrictions
+
+Administrators can restrict registrations to specific email domains:
+
+```yaml
+AllowedDomains: "example.com, university.edu"
+```
+
+If your email domain is not in the allowed list, you'll see an error:
+
+```
+✗ Only emails from the following domains are allowed: example.com, university.edu
+```
+
+## Password Recovery
+
+If you forget your password, you can request a password reset:
+
+<Steps>
+  <Step title="Request Password Reset">
+    Navigate to the password recovery page and enter your email address.
+  </Step>
+  
+  <Step title="Complete CAPTCHA">
+    Complete the CAPTCHA verification if enabled.
+  </Step>
+  
+  <Step title="Check Your Email">
+    You'll receive an email with a password reset link (format: `/account/reset?token=...&email=...`).
+  </Step>
+  
+  <Step title="Set New Password">
+    Click the link and enter your new password to complete the reset process.
+  </Step>
+</Steps>
+
+<Note>
+  Password recovery is only available if email confirmation is enabled on the platform. Otherwise, contact an administrator.
+</Note>
+
+## Account Setup
+
+After registration and verification, you can customize your profile:
+
+### Update Profile Information
+
+- **Username**: Change your display name
+- **Description**: Add a bio or description
+- **Avatar**: Upload a profile picture (max 3MB, resized to 300x300)
+
+### Change Email Address
+
+You can update your email address:
+
+1. Navigate to account settings
+2. Enter your new email address
+3. Verify the new email using the confirmation link sent to the new address
+
+### Change Password
+
+Update your password at any time:
+
+1. Go to account settings
+2. Enter your current password
+3. Enter and confirm your new password
+4. Submit to update
+
+## API Reference
+
+<Info>
+  All account operations are available through the REST API at `/api/Account/*`. See the [API Documentation](/api-reference/account) for details.
+</Info>
+
+### Key Endpoints
+
+- `POST /api/Account/Register` - Create new account
+- `POST /api/Account/Verify` - Verify email address
+- `POST /api/Account/LogIn` - Authenticate user
+- `POST /api/Account/Recovery` - Request password reset
+- `PUT /api/Account/Update` - Update profile information
+
+See AccountController.cs:38-126 for registration implementation details.

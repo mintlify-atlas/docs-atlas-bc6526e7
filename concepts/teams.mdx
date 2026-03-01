@@ -1,0 +1,388 @@
+---
+title: Teams & Participation
+description: Understanding team structure, participation, and divisions in GZCTF
+---
+
+Teams are groups of users that compete together in CTF games. Each team can participate in multiple games, with separate participation records and scoring for each game.
+
+## Team Structure
+
+A team in GZCTF consists of:
+
+<CardGroup cols={2}>
+  <Card title="Captain" icon="crown">
+    The team leader who created the team and manages members
+  </Card>
+  <Card title="Members" icon="users">
+    Users who have accepted invitations to join the team
+  </Card>
+  <Card title="Participation" icon="ticket">
+    Registration records for each game the team joins
+  </Card>
+  <Card title="Invite System" icon="envelope">
+    Token-based system for recruiting new members
+  </Card>
+</CardGroup>
+
+## Team Properties
+
+### Basic Information
+
+```cs
+public class Team
+{
+    public int Id { get; set; }
+    public string Name { get; set; }     // Max 15 characters
+    public string? Bio { get; set; }     // Team description
+    public string? AvatarHash { get; set; }
+    public bool Locked { get; set; }     // Prevents modifications
+}
+```
+
+| Property | Description |
+|----------|-------------|
+| **Name** | Team name (max 15 characters) |
+| **Bio** | Team biography/description |
+| **AvatarHash** | Team avatar image identifier |
+| **Locked** | When true, team cannot be modified |
+| **CaptainId** | User ID of the team captain |
+
+### Team Invitations
+
+Each team has a unique invite code for recruiting members:
+
+```cs
+public string InviteToken { get; set; } = Guid.NewGuid().ToString("N");
+public string InviteCode => $"{Name}:{Id}:{InviteToken}";
+```
+
+<Steps>
+  <Step title="Captain generates invite">
+    The team captain can regenerate the invite token at any time:
+    ```cs
+    team.UpdateInviteToken(); // Generates new GUID
+    ```
+  </Step>
+  
+  <Step title="Share invite code">
+    Captain shares the invite code (format: `TeamName:123:abc123def456`)
+  </Step>
+  
+  <Step title="Member joins">
+    User submits the invite code to join the team
+  </Step>
+  
+  <Step title="Verification">
+    System validates the code matches team name, ID, and current token
+  </Step>
+</Steps>
+
+<Warning>
+  Regenerating the invite token invalidates all previously shared invite codes.
+</Warning>
+
+## Participation
+
+Participation represents a team's registration in a specific game.
+
+### Participation Status
+
+Each participation has one of the following statuses:
+
+<Tabs>
+  <Tab title="Pending">
+    **Team registered and awaiting approval**
+    
+    When `AcceptWithoutReview = false`, teams start in Pending status and require administrator approval.
+  </Tab>
+  
+  <Tab title="Accepted">
+    **Team approved and can compete**
+    
+    Teams can access challenges, submit flags, and appear on the scoreboard.
+  </Tab>
+  
+  <Tab title="Rejected">
+    **Registration denied**
+    
+    Team cannot participate in the game.
+  </Tab>
+  
+  <Tab title="Suspended">
+    **Temporarily banned**
+    
+    Team participation is suspended, typically for rule violations.
+  </Tab>
+  
+  <Tab title="Unsubmitted">
+    **Writeup not submitted**
+    
+    Team failed to submit required writeup before deadline.
+  </Tab>
+</Tabs>
+
+```cs
+public enum ParticipationStatus : byte
+{
+    Pending = 0,
+    Accepted = 1,
+    Rejected = 2,
+    Suspended = 3,
+    Unsubmitted = 4
+}
+```
+
+### Participation Properties
+
+```cs
+public class Participation
+{
+    public int Id { get; set; }
+    public ParticipationStatus Status { get; set; }
+    public string Token { get; set; }  // Unique participation token
+    
+    // Relationships
+    public int GameId { get; set; }
+    public Game Game { get; set; }
+    public int TeamId { get; set; }
+    public Team Team { get; set; }
+    public int? DivisionId { get; set; }
+    public Division? Division { get; set; }
+    
+    // Competition data
+    public HashSet<UserParticipation> Members { get; set; }
+    public HashSet<GameChallenge> Challenges { get; set; }
+    public List<GameInstance> Instances { get; set; }
+    public List<Submission> Submissions { get; set; }
+    public List<FirstSolve> FirstSolves { get; set; }  // Blood bonuses earned
+    public LocalFile? Writeup { get; set; }
+}
+```
+
+<Info>
+  The participation **token** is a cryptographically signed unique identifier used for:
+  - Dynamic flag generation
+  - Team-specific container instances
+  - Preventing flag sharing
+</Info>
+
+## Divisions
+
+Divisions allow games to segment participants into separate tracks with different permissions and scoreboards.
+
+### Division Structure
+
+```cs
+public class Division
+{
+    public int Id { get; set; }
+    public int GameId { get; set; }
+    public string Name { get; set; }
+    public string? InviteCode { get; set; }
+    public GamePermission DefaultPermissions { get; set; }
+}
+```
+
+### Common Use Cases
+
+<AccordionGroup>
+  <Accordion title="Student vs. Professional Divisions">
+    Separate scoreboards for different skill levels:
+    - **Student Division**: RankOverall permission enabled
+    - **Professional Division**: RankOverall disabled (unofficial)
+  </Accordion>
+  
+  <Accordion title="Regional Divisions">
+    Separate divisions by geography:
+    - Division-specific invite codes
+    - Regional scoreboards
+    - Same challenges, independent rankings
+  </Accordion>
+  
+  <Accordion title="Permission-Based Access">
+    Control challenge visibility per division:
+    - **Beginner**: Access to easy challenges only
+    - **Advanced**: Full challenge access
+    - Configured via `DivisionChallengeConfig`
+  </Accordion>
+</AccordionGroup>
+
+### Division Permissions
+
+Divisions use the `GamePermission` flag system to control access:
+
+<Tabs>
+  <Tab title="Division-Level">
+    **Permissions that apply to the entire division:**
+    
+    - `JoinGame`: Can register for the game through this division
+    - `RankOverall`: Appears on the overall scoreboard
+    - `RequireReview`: Requires admin approval (overrides game setting)
+  </Tab>
+  
+  <Tab title="Challenge-Level">
+    **Per-challenge permissions via DivisionChallengeConfig:**
+    
+    - `ViewChallenge`: Can see challenge details
+    - `SubmitFlags`: Can submit flag answers
+    - `GetScore`: Receives points for correct flags
+    - `GetBlood`: Eligible for blood bonuses
+    - `AffectDynamicScore`: Submissions affect scoring for all teams
+  </Tab>
+</Tabs>
+
+```cs
+public class DivisionChallengeConfig
+{
+    public int DivisionId { get; set; }
+    public int ChallengeId { get; set; }
+    public GamePermission Permissions { get; set; } = GamePermission.All;
+}
+```
+
+<Tip>
+  Use `GamePermission.All` (int.MaxValue) to grant all current and future permissions by default.
+</Tip>
+
+### Example: Multi-Division Setup
+
+```cs
+var officialDivision = new Division
+{
+    Name = "Official",
+    InviteCode = "OFFICIAL2024",
+    DefaultPermissions = GamePermission.All  // Full access
+};
+
+var observerDivision = new Division
+{
+    Name = "Observer",
+    InviteCode = "OBSERVER2024",
+    DefaultPermissions = 
+        GamePermission.JoinGame |
+        GamePermission.ViewChallenge |
+        GamePermission.SubmitFlags
+        // No GetScore or RankOverall - can play but not compete
+};
+```
+
+## Team Constraints
+
+Games can enforce limits on team composition:
+
+### Team Size Limit
+
+```cs
+public int TeamMemberCountLimit { get; set; }  // 0 = unlimited
+```
+
+- Set in game configuration
+- Enforced when members join teams
+- Captain is included in the count
+
+<Warning>
+  Teams exceeding the limit cannot register for the game.
+</Warning>
+
+### Container Limit
+
+```cs
+public int ContainerCountLimit { get; set; } = 3;
+```
+
+Limits simultaneous container instances per team:
+- Prevents resource exhaustion
+- Teams must stop containers to start new ones
+- Default: 3 concurrent containers
+
+## Model References
+
+<Tabs>
+  <Tab title="Team Model">
+    Location: `~/workspace/source/src/GZCTF/Models/Data/Team.cs`
+    
+    ```cs
+    public class Team
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public string? Bio { get; set; }
+        public string? AvatarHash { get; set; }
+        public bool Locked { get; set; }
+        public string InviteToken { get; set; }
+        
+        // Relationships
+        public Guid CaptainId { get; set; }
+        public UserInfo? Captain { get; set; }
+        public HashSet<UserInfo> Members { get; set; }
+        public List<Participation> Participations { get; set; }
+        public HashSet<Game>? Games { get; set; }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Participation Model">
+    Location: `~/workspace/source/src/GZCTF/Models/Data/Participation.cs`
+    
+    ```cs
+    public class Participation
+    {
+        public int Id { get; set; }
+        public ParticipationStatus Status { get; set; }
+        public string Token { get; set; }
+        public LocalFile? Writeup { get; set; }
+        
+        // Foreign keys
+        public int GameId { get; set; }
+        public Game Game { get; set; }
+        public int TeamId { get; set; }
+        public Team Team { get; set; }
+        public int? DivisionId { get; set; }
+        public Division? Division { get; set; }
+        
+        // Competition data
+        public HashSet<UserParticipation> Members { get; set; }
+        public HashSet<GameChallenge> Challenges { get; set; }
+        public List<GameInstance> Instances { get; set; }
+        public List<Submission> Submissions { get; set; }
+        public List<FirstSolve> FirstSolves { get; set; }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Division Model">
+    Location: `~/workspace/source/src/GZCTF/Models/Data/Division.cs`
+    
+    ```cs
+    public partial class Division
+    {
+        public int Id { get; set; }
+        public int GameId { get; set; }
+        public string Name { get; set; }
+        public string? InviteCode { get; set; }
+        public GamePermission DefaultPermissions { get; set; }
+        
+        // Relationships
+        public Game? Game { get; set; }
+        public HashSet<DivisionChallengeConfig> ChallengeConfigs { get; set; }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Games" icon="trophy" href="/concepts/games">
+    Learn about game configuration and lifecycle
+  </Card>
+  <Card title="Scoring" icon="chart-line" href="/concepts/scoring">
+    Understand how teams earn points
+  </Card>
+  <Card title="Challenges" icon="flag" href="/concepts/challenges">
+    Explore challenge types and structure
+  </Card>
+  <Card title="Admin Guide" icon="user-shield" href="/admin/team-management">
+    Manage user permissions and roles
+  </Card>
+</CardGroup>

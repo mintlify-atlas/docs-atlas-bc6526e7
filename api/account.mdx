@@ -1,0 +1,362 @@
+---
+title: 'Account API'
+description: 'User registration, authentication, and profile management'
+icon: 'user'
+---
+
+## Overview
+
+The Account API handles user registration, login, profile management, and password operations.
+
+## Registration
+
+### Register New User
+
+Create a new user account.
+
+#### POST /api/account/register
+
+<Note>Rate limited. May require captcha verification and email confirmation based on platform settings.</Note>
+
+<ParamField body="userName" type="string" required>
+  Unique username (3-15 characters)
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Valid email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User password (may require encryption)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "userName": "newuser",
+  "email": "newuser@example.com",
+  "password": "encrypted_password_string"
+}
+```
+
+```json Response
+{
+  "title": "Registration successful",
+  "status": 200,
+  "data": "EmailConfirmationRequired"
+}
+```
+</ResponseExample>
+
+<Expandable title="Registration Status Values">
+  - `LoggedIn` - Account activated immediately, user is logged in
+  - `EmailConfirmationRequired` - Email verification required before login
+  - `AdminConfirmationRequired` - Manual admin approval required
+</Expandable>
+
+<Warning>
+  Email domain restrictions may apply. Check platform configuration for allowed domains.
+</Warning>
+
+### Verify Email
+
+Confirm email address using verification token.
+
+#### POST /api/account/verify
+
+<ParamField body="email" type="string" required>
+  Base64-encoded email address
+</ParamField>
+
+<ParamField body="token" type="string" required>
+  Base64-encoded verification token from email
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "email": "bmV3dXNlckBleGFtcGxlLmNvbQ==",
+  "token": "dmVyaWZpY2F0aW9uX3Rva2VuX2hlcmU="
+}
+```
+</ResponseExample>
+
+<Info>
+  After successful verification, the user is automatically logged in.
+</Info>
+
+## Authentication
+
+See the [Authentication](/api/authentication) page for detailed login and logout procedures.
+
+## Profile Management
+
+### Get Profile
+
+Retrieve current user's profile information.
+
+#### GET /api/account/profile
+
+<Note>Requires User authentication.</Note>
+
+<ResponseExample>
+```json Response
+{
+  "id": "user-guid",
+  "userName": "currentuser",
+  "email": "user@example.com",
+  "bio": "CTF enthusiast",
+  "phone": "+1234567890",
+  "realName": "John Doe",
+  "stdNumber": "STU12345",
+  "avatar": "/assets/avatars/user123.jpg",
+  "role": "User",
+  "emailConfirmed": true,
+  "registerTimeUtc": "2025-01-15T10:00:00Z",
+  "lastSignedInUtc": "2026-03-01T08:00:00Z",
+  "lastVisitedUtc": "2026-03-01T12:00:00Z"
+}
+```
+</ResponseExample>
+
+### Update Profile
+
+Update user information.
+
+#### PUT /api/account/update
+
+<ParamField body="userName" type="string">
+  New username
+</ParamField>
+
+<ParamField body="bio" type="string">
+  User bio/description
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Phone number
+</ParamField>
+
+<ParamField body="realName" type="string">
+  Real name
+</ParamField>
+
+<ParamField body="stdNumber" type="string">
+  Student number or identifier
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "userName": "newusername",
+  "bio": "Updated bio text",
+  "phone": "+1987654321"
+}
+```
+</ResponseExample>
+
+<Note>
+  Changing username may be restricted based on platform policy.
+</Note>
+
+### Update Avatar
+
+Upload a new profile avatar.
+
+#### PUT /api/account/avatar
+
+<ParamField body="file" type="file" required>
+  Image file (max 3MB, automatically resized to 300x300)
+</ParamField>
+
+<ResponseExample>
+```json Response
+"/assets/avatars/newavatar123.jpg"
+```
+</ResponseExample>
+
+## Password Management
+
+### Change Password
+
+Update account password (requires current password).
+
+#### PUT /api/account/changepassword
+
+<ParamField body="old" type="string" required>
+  Current password (encrypted)
+</ParamField>
+
+<ParamField body="new" type="string" required>
+  New password (encrypted)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "old": "encrypted_old_password",
+  "new": "encrypted_new_password"
+}
+```
+</ResponseExample>
+
+### Request Password Reset
+
+Request a password reset email.
+
+#### POST /api/account/recovery
+
+<Note>Rate limited. May require captcha verification.</Note>
+
+<ParamField body="email" type="string" required>
+  Registered email address
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "email": "user@example.com"
+}
+```
+
+```json Response
+{
+  "title": "Password reset email sent",
+  "status": 200
+}
+```
+</ResponseExample>
+
+### Reset Password
+
+Reset password using email token.
+
+#### POST /api/account/passwordreset
+
+<ParamField body="email" type="string" required>
+  Base64-encoded email address
+</ParamField>
+
+<ParamField body="rToken" type="string" required>
+  Base64-encoded reset token from email
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  New password (encrypted)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "email": "dXNlckBleGFtcGxlLmNvbQ==",
+  "rToken": "cmVzZXRfdG9rZW5faGVyZQ==",
+  "password": "encrypted_new_password"
+}
+```
+</ResponseExample>
+
+## Email Management
+
+### Change Email
+
+Request email address change.
+
+#### PUT /api/account/changeemail
+
+<Note>Rate limited. Requires email verification for the new address.</Note>
+
+<ParamField body="newMail" type="string" required>
+  New email address
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "newMail": "newemail@example.com"
+}
+```
+
+```json Response
+{
+  "title": "Verification email sent",
+  "status": 200,
+  "data": true
+}
+```
+</ResponseExample>
+
+<Warning>
+  Email domain restrictions apply. The new email must be from an allowed domain.
+</Warning>
+
+### Confirm Email Change
+
+Confirm new email address using verification token.
+
+#### POST /api/account/mailchangeconfirm
+
+<ParamField body="email" type="string" required>
+  Base64-encoded new email address
+</ParamField>
+
+<ParamField body="token" type="string" required>
+  Base64-encoded verification token
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "email": "bmV3ZW1haWxAZXhhbXBsZS5jb20=",
+  "token": "Y2hhbmdlX2VtYWlsX3Rva2Vu"
+}
+```
+</ResponseExample>
+
+## Configuration Notes
+
+<AccordionGroup>
+  <Accordion title="Email Verification">
+    When `EmailConfirmationRequired` is enabled:
+    - Registration sends verification email
+    - Users cannot log in until email is confirmed
+    - Email URL format: `/account/verify?token={token}&email={email}`
+  </Accordion>
+  
+  <Accordion title="Admin Approval">
+    When `ActiveOnRegister` is disabled and `EmailConfirmationRequired` is disabled:
+    - New accounts require manual admin approval
+    - Users cannot log in until approved
+    - Admins must change status via `/api/admin/users/{id}`
+  </Accordion>
+  
+  <Accordion title="Password Encryption">
+    If the platform has `ApiEncryption` enabled:
+    - All password fields must be encrypted client-side
+    - Use the platform's public key for encryption
+    - Check `/api/admin/config` for encryption status
+  </Accordion>
+  
+  <Accordion title="Email Domains">
+    Platform may restrict registration to specific email domains:
+    - Configured via `EmailDomainList` in account policy
+    - Format: comma-separated list (e.g., "edu,org.edu")
+    - Empty list allows all domains
+  </Accordion>
+</AccordionGroup>
+
+## Development Mode
+
+<Info>
+  In development mode, verification and reset links are logged instead of sent via email. Check server logs for tokens.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Login and session management
+  </Card>
+  <Card title="Team API" icon="users" href="/api/team">
+    Create and join teams
+  </Card>
+</CardGroup>

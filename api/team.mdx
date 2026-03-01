@@ -1,0 +1,378 @@
+---
+title: 'Team API'
+description: 'Team management and collaboration endpoints'
+icon: 'users'
+---
+
+## Overview
+
+Teams are groups of users that participate in CTF games together. The Team API provides endpoints for creating teams, managing members, and handling invitations.
+
+## Team Operations
+
+### Get Team Info
+
+Retrieve public information about a team.
+
+#### GET /api/team/{id}
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "id": 42,
+  "name": "Team Alpha",
+  "bio": "We are competitive CTF players",
+  "avatar": "/assets/avatars/team42.jpg",
+  "captain": {
+    "id": "user-guid",
+    "userName": "captain123"
+  },
+  "members": [
+    {
+      "id": "user-guid-1",
+      "userName": "player1",
+      "avatar": "/assets/avatars/user1.jpg"
+    },
+    {
+      "id": "user-guid-2",
+      "userName": "player2",
+      "avatar": "/assets/avatars/user2.jpg"
+    }
+  ],
+  "locked": false
+}
+```
+</ResponseExample>
+
+### Get User Teams
+
+Retrieve all teams the current user is a member of.
+
+#### GET /api/team
+
+<Note>Requires User authentication.</Note>
+
+<ResponseExample>
+```json Response
+[
+  {
+    "id": 42,
+    "name": "Team Alpha",
+    "bio": "Competition team",
+    "captain": { "id": "...", "userName": "captain123" },
+    "members": [...]
+  },
+  {
+    "id": 43,
+    "name": "Team Beta",
+    "captain": { "id": "...", "userName": "leader456" },
+    "members": [...]
+  }
+]
+```
+</ResponseExample>
+
+### Create Team
+
+Create a new team with the current user as captain.
+
+#### POST /api/team
+
+<Note>Each user can create up to 3 teams. Rate limited.</Note>
+
+<ParamField body="name" type="string" required>
+  Team name (must be unique)
+</ParamField>
+
+<ParamField body="bio" type="string">
+  Team bio/description (optional)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "name": "New Team",
+  "bio": "We are learning CTF together"
+}
+```
+
+```json Response
+{
+  "id": 44,
+  "name": "New Team",
+  "bio": "We are learning CTF together",
+  "captain": {
+    "id": "current-user-guid",
+    "userName": "currentuser"
+  },
+  "members": [
+    {
+      "id": "current-user-guid",
+      "userName": "currentuser"
+    }
+  ],
+  "locked": false
+}
+```
+</ResponseExample>
+
+<Expandable title="Response Codes">
+  - `200` - Team created successfully
+  - `400` - Invalid request (name empty, creation limit exceeded)
+  - `401` - Not authenticated
+</Expandable>
+
+### Update Team
+
+Update team information.
+
+#### PUT /api/team/{id}
+
+<Note>Only the team captain can update team information.</Note>
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+<ParamField body="name" type="string">
+  New team name
+</ParamField>
+
+<ParamField body="bio" type="string">
+  New team bio
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "name": "Updated Team Name",
+  "bio": "Updated description"
+}
+```
+</ResponseExample>
+
+### Delete Team
+
+Delete a team permanently.
+
+#### DELETE /api/team/{id}
+
+<Warning>
+  Only the captain can delete teams. Teams participating in active games cannot be deleted.
+</Warning>
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+## Team Membership
+
+### Transfer Ownership
+
+Transfer team captain role to another member.
+
+#### PUT /api/team/{id}/transfer
+
+<Note>Only the current captain can transfer ownership.</Note>
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+<ParamField body="newCaptainId" type="string" required>
+  User ID of the new captain (must be a team member)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "newCaptainId": "user-guid-2"
+}
+```
+</ResponseExample>
+
+<Warning>
+  The new captain must not exceed the team creation limit (3 teams).
+</Warning>
+
+### Kick Member
+
+Remove a member from the team.
+
+#### POST /api/team/{id}/kick/{userId}
+
+<Note>Only the captain can kick members. Cannot kick from locked teams in active games.</Note>
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  User ID to remove
+</ParamField>
+
+### Leave Team
+
+Leave a team as a member.
+
+#### POST /api/team/{id}/leave
+
+<Warning>
+  Cannot leave teams that are locked and participating in active games.
+</Warning>
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+## Invitations
+
+### Get Invite Code
+
+Retrieve the team's invitation code.
+
+#### GET /api/team/{id}/invite
+
+<Note>Only the captain can view the invite code.</Note>
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+<ResponseExample>
+```json Response
+"Team Alpha:42:a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+```
+</ResponseExample>
+
+<Info>
+  The invite code format is: `TeamName:TeamId:InviteToken`
+</Info>
+
+### Regenerate Invite Code
+
+Generate a new invitation token for the team.
+
+#### PUT /api/team/{id}/invite
+
+<Note>Only the captain can regenerate invite codes. Previous codes become invalid.</Note>
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+<ResponseExample>
+```json Response
+"Team Alpha:42:z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4"
+```
+</ResponseExample>
+
+### Accept Invitation
+
+Join a team using an invitation code.
+
+#### POST /api/team/accept
+
+<ParamField body="code" type="string" required>
+  Full invitation code from team captain
+</ParamField>
+
+<ResponseExample>
+```json Request
+"Team Alpha:42:a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+```
+</ResponseExample>
+
+<Expandable title="Response Codes">
+  - `200` - Successfully joined team
+  - `400` - Invalid code format, team not found, or already a member
+  - `401` - Not authenticated
+</Expandable>
+
+## Team Avatar
+
+### Update Avatar
+
+Upload a new team avatar image.
+
+#### PUT /api/team/{id}/avatar
+
+<Note>Only the captain can update the avatar. Max file size: 3MB.</Note>
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+<ParamField body="file" type="file" required>
+  Image file (JPEG, PNG, etc.)
+</ParamField>
+
+<ResponseExample>
+```json Response
+"/assets/avatars/abc123def456.jpg"
+```
+</ResponseExample>
+
+<Info>
+  The image will be automatically resized to 300x300 pixels.
+</Info>
+
+## Signature Verification
+
+### Verify Team Signature
+
+Verify a team's cryptographic signature.
+
+#### POST /api/team/verify
+
+<ParamField body="teamToken" type="string" required>
+  Team token in format `teamId:signature`
+</ParamField>
+
+<ParamField body="publicKey" type="string" required>
+  Base64-encoded Ed25519 public key (32 bytes)
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "teamToken": "42:a1b2c3d4e5f6...",
+  "publicKey": "SGVsbG8gV29ybGQhIFRoaXMgaXMgYSB0ZXN0"
+}
+```
+</ResponseExample>
+
+<Expandable title="Response Codes">
+  - `200` - Signature is valid
+  - `400` - Invalid token or public key format
+  - `401` - Signature verification failed
+</Expandable>
+
+<Info>
+  Team signatures use Ed25519 and verify against the data `GZCTF_TEAM_{teamId}`.
+</Info>
+
+## Team Locking
+
+Teams become **locked** when they join an active game. While locked:
+
+- Members cannot leave
+- Captain cannot kick members
+- Team cannot be deleted
+
+Locking prevents roster changes during competition.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Game API" icon="gamepad" href="/api/game">
+    Join games with your team
+  </Card>
+  <Card title="Account API" icon="user" href="/api/account">
+    Manage your user account
+  </Card>
+</CardGroup>

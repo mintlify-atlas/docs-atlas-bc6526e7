@@ -1,0 +1,393 @@
+---
+title: Docker Deployment
+description: Deploy GZCTF using Docker and Docker Compose
+---
+
+GZCTF can be deployed using Docker, which is the recommended deployment method for most use cases. This guide covers Docker deployment using Docker Compose.
+
+## Prerequisites
+
+- Docker Engine 20.10 or later
+- Docker Compose v2.0 or later
+- PostgreSQL database (can be deployed via Docker Compose)
+- (Optional) Redis for distributed caching and SignalR backplane
+
+## Understanding the Dockerfile
+
+GZCTF uses a multi-stage Dockerfile based on .NET 10.0 Alpine images:
+
+```dockerfile /home/daytona/workspace/source/src/GZCTF/Dockerfile
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS build
+ARG TARGETPLATFORM
+COPY publish /build
+RUN cp -r /build/${TARGETPLATFORM} /publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
+
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
+    LC_ALL=en_US.UTF-8
+
+WORKDIR /app
+RUN apk add --update --no-cache wget libpcap icu-data-full icu-libs \
+    ca-certificates libgdiplus tzdata krb5-libs && \
+    update-ca-certificates
+
+COPY --from=build --chown=$APP_UID:$APP_UID /publish .
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=5m --timeout=3s --start-period=10s --retries=1 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/healthz || exit 1
+
+ENTRYPOINT ["dotnet", "GZCTF.dll"]
+```
+
+### Key Features
+
+- **Multi-platform support**: Uses `TARGETPLATFORM` build argument for cross-platform builds
+- **Alpine-based**: Minimal image size with required dependencies (libpcap for traffic capture, ICU for globalization)
+- **Health checks**: Built-in health endpoint at `/healthz` on port 3000
+- **Port configuration**: Application runs on port 8080, metrics/health on port 3000
+
+## Docker Compose Setup
+
+<Steps>
+
+### Create Docker Compose file
+
+Create a `docker-compose.yml` file for your deployment:
+
+<CodeGroup>
+
+```yaml docker-compose.yml
+version: '3.8'
+
+services:
+  gzctf:
+    image: gztime/gzctf:latest
+    container_name: gzctf
+    restart: unless-stopped
+    environment:
+      # Database connection
+      - GZCTF_ConnectionStrings__Database=Host=db;Port=5432;Database=gzctf;Username=gzctf;Password=<your-db-password>
+      
+      # Redis cache (optional but recommended)
+      - GZCTF_ConnectionStrings__RedisCache=redis:6379
+      
+      # Storage configuration
+      - GZCTF_ConnectionStrings__Storage=disk://path=/app/files
+      
+      # Email configuration (optional)
+      - GZCTF_EmailConfig__UserName=<smtp-username>
+      - GZCTF_EmailConfig__Password=<smtp-password>
+      - GZCTF_EmailConfig__SenderAddress=noreply@example.com
+      - GZCTF_EmailConfig__SenderName=GZCTF Platform
+      - GZCTF_EmailConfig__Smtp__Host=smtp.example.com
+      - GZCTF_EmailConfig__Smtp__Port=587
+      
+      # Container provider (for challenges)
+      - GZCTF_ContainerProvider__Type=Docker
+      - GZCTF_ContainerProvider__PublicEntry=<your-domain-or-ip>
+      - GZCTF_ContainerProvider__DockerConfig__Uri=unix:///var/run/docker.sock
+    volumes:
+      - ./files:/app/files
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock  # For Docker challenge management
+    ports:
+      - "8080:8080"  # Application port
+      - "3000:3000"  # Metrics and health check port
+    depends_on:
+      - db
+      - redis
+    networks:
+      - gzctf-network
+
+  db:
+    image: postgres:16-alpine
+    container_name: gzctf-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=gzctf
+      - POSTGRES_USER=gzctf
+      - POSTGRES_PASSWORD=<your-db-password>
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    networks:
+      - gzctf-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: gzctf-redis
+    restart: unless-stopped
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - gzctf-network
+
+networks:
+  gzctf-network:
+    driver: bridge
+```
+
+```yaml docker-compose.minimal.yml
+# Minimal setup without Redis
+version: '3.8'
+
+services:
+  gzctf:
+    image: gztime/gzctf:latest
+    container_name: gzctf
+    restart: unless-stopped
+    environment:
+      - GZCTF_ConnectionStrings__Database=Host=db;Port=5432;Database=gzctf;Username=gzctf;Password=<your-db-password>
+      - GZCTF_ConnectionStrings__Storage=disk://path=/app/files
+      - GZCTF_ContainerProvider__Type=Docker
+      - GZCTF_ContainerProvider__DockerConfig__Uri=unix:///var/run/docker.sock
+    volumes:
+      - ./files:/app/files
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8080:8080"
+      - "3000:3000"
+    depends_on:
+      - db
+    networks:
+      - gzctf-network
+
+  db:
+    image: postgres:16-alpine
+    container_name: gzctf-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=gzctf
+      - POSTGRES_USER=gzctf
+      - POSTGRES_PASSWORD=<your-db-password>
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    networks:
+      - gzctf-network
+
+networks:
+  gzctf-network:
+    driver: bridge
+```
+
+</CodeGroup>
+
+### Configure environment variables
+
+<Note>
+All configuration values can be set via environment variables using the `GZCTF_` prefix. Use double underscores (`__`) to represent nested configuration keys.
+
+Example: `ConnectionStrings:Database` becomes `GZCTF_ConnectionStrings__Database`
+</Note>
+
+Update the following values in your `docker-compose.yml`:
+
+- `<your-db-password>`: Secure password for PostgreSQL
+- `<your-domain-or-ip>`: Public IP or domain for challenge container access
+- SMTP settings for email notifications (optional)
+
+### Start the services
+
+Run the following command to start all services:
+
+```bash
+docker compose up -d
+```
+
+### Verify deployment
+
+Check that all containers are running:
+
+```bash
+docker compose ps
+```
+
+Check the health endpoint:
+
+```bash
+curl http://localhost:3000/healthz
+```
+
+View logs:
+
+```bash
+docker compose logs -f gzctf
+```
+
+</Steps>
+
+## Storage Configuration
+
+GZCTF supports multiple storage backends:
+
+<CodeGroup>
+
+```yaml Local Disk
+environment:
+  - GZCTF_ConnectionStrings__Storage=disk://path=/app/files
+volumes:
+  - ./files:/app/files
+```
+
+```yaml MinIO
+environment:
+  - GZCTF_ConnectionStrings__Storage=minio.s3://bucket=gzctf&region=us-east-1&endpoint=http://minio:9000&accessKey=minioadmin&secretKey=minioadmin&forcePathStyle=true
+```
+
+```yaml AWS S3
+environment:
+  - GZCTF_ConnectionStrings__Storage=aws.s3://bucket=gzctf-bucket&region=us-east-1&accessKey=<access-key>&secretKey=<secret-key>
+```
+
+</CodeGroup>
+
+## Container Provider Configuration
+
+### Docker Provider
+
+For challenge containers using Docker:
+
+```yaml
+environment:
+  - GZCTF_ContainerProvider__Type=Docker
+  - GZCTF_ContainerProvider__PublicEntry=ctf.example.com
+  - GZCTF_ContainerProvider__DockerConfig__Uri=unix:///var/run/docker.sock
+  # Optional: Docker registry authentication
+  - GZCTF_ContainerProvider__DockerConfig__UserName=<registry-user>
+  - GZCTF_ContainerProvider__DockerConfig__Password=<registry-password>
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+```
+
+<Warning>
+Mounting the Docker socket (`/var/run/docker.sock`) gives GZCTF full access to the Docker daemon. Ensure proper security measures are in place.
+</Warning>
+
+### Kubernetes Provider
+
+For Kubernetes-based challenge deployment, see the [Kubernetes Deployment](/deployment/kubernetes) guide.
+
+## Reverse Proxy Setup
+
+<Note>
+It's recommended to run GZCTF behind a reverse proxy like Nginx or Caddy for HTTPS termination and additional security.
+</Note>
+
+### Nginx Configuration
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name ctf.example.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    client_max_body_size 64M;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+### Caddy Configuration
+
+```caddyfile
+ctf.example.com {
+    reverse_proxy localhost:8080
+    encode gzip
+}
+```
+
+### Configure Forwarded Headers
+
+When behind a reverse proxy, configure forwarded headers:
+
+```yaml
+environment:
+  - GZCTF_ForwardedOptions__ForwardedHeaders=XForwardedFor,XForwardedProto
+  - GZCTF_ForwardedOptions__KnownProxies__0=172.18.0.1
+```
+
+## Updating GZCTF
+
+To update to the latest version:
+
+```bash
+# Pull the latest image
+docker compose pull
+
+# Restart services
+docker compose up -d
+```
+
+<Warning>
+Always backup your database and files before updating!
+</Warning>
+
+## Backup and Restore
+
+### Backup Database
+
+```bash
+docker exec gzctf-db pg_dump -U gzctf gzctf > backup.sql
+```
+
+### Restore Database
+
+```bash
+docker exec -i gzctf-db psql -U gzctf gzctf < backup.sql
+```
+
+### Backup Files
+
+```bash
+tar -czf files-backup.tar.gz ./files
+```
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If GZCTF fails to connect to the database:
+
+1. Verify the database is running: `docker compose ps db`
+2. Check database logs: `docker compose logs db`
+3. Verify connection string format
+4. Ensure the database has been initialized
+
+### Container Creation Failures
+
+If challenge containers fail to start:
+
+1. Verify Docker socket is mounted correctly
+2. Check Docker daemon is running
+3. Verify `PublicEntry` is correctly configured
+4. Check GZCTF logs: `docker compose logs gzctf`
+
+### Permission Issues
+
+If you encounter permission issues with mounted volumes:
+
+```bash
+# Fix ownership
+sudo chown -R 1000:1000 ./files ./logs
+```
+
+## Next Steps
+
+- [Configuration Reference](/deployment/configuration) - Detailed configuration options
+- [Security Considerations](/deployment/security) - Security best practices
+- [Kubernetes Deployment](/deployment/kubernetes) - Deploy on Kubernetes

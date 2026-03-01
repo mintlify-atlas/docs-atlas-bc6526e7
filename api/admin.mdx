@@ -1,0 +1,545 @@
+---
+title: 'Admin API'
+description: 'Administrative endpoints for platform management'
+icon: 'shield'
+---
+
+## Overview
+
+The Admin API provides comprehensive administrative control over users, teams, games, and platform configuration.
+
+<Warning>
+  All endpoints in this section require **Admin** role. Unauthorized access returns `403 Forbidden`.
+</Warning>
+
+## Platform Configuration
+
+### Get Configuration
+
+Retrieve global platform settings.
+
+#### GET /api/admin/config
+
+<ResponseExample>
+```json Response
+{
+  "accountPolicy": {
+    "allowRegister": true,
+    "activeOnRegister": false,
+    "emailConfirmationRequired": true,
+    "emailDomainList": "edu,org",
+    "useCaptcha": true
+  },
+  "globalConfig": {
+    "title": "GZCTF Platform",
+    "slogan": "Hack the Planet",
+    "logoHash": "abc123...",
+    "faviconHash": "def456...",
+    "apiEncryption": false
+  },
+  "containerPolicy": {
+    "enableTrafficCapture": true,
+    "publicEntry": "ctf.example.com",
+    "portRangeStart": 30000,
+    "portRangeEnd": 40000
+  }
+}
+```
+</ResponseExample>
+
+### Update Configuration
+
+Modify platform settings.
+
+#### PUT /api/admin/config
+
+<ParamField body="accountPolicy" type="object">
+  Account policy settings
+</ParamField>
+
+<ParamField body="globalConfig" type="object">
+  Global platform configuration
+</ParamField>
+
+<ParamField body="containerPolicy" type="object">
+  Container management settings
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "accountPolicy": {
+    "allowRegister": true,
+    "useCaptcha": true
+  },
+  "globalConfig": {
+    "title": "My CTF Platform"
+  }
+}
+```
+</ResponseExample>
+
+### Update Platform Logo
+
+Upload custom logo and favicon.
+
+#### POST /api/admin/config/logo
+
+<ParamField body="file" type="file" required>
+  Image file (max 3MB, generates both logo and favicon)
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "logo": "/assets/logo_640.png",
+  "favicon": "/assets/favicon_256.png"
+}
+```
+</ResponseExample>
+
+### Reset Platform Logo
+
+Restore default logo and favicon.
+
+#### DELETE /api/admin/config/logo
+
+## User Management
+
+### List Users
+
+Retrieve paginated list of users.
+
+#### GET /api/admin/users
+
+<ParamField query="count" type="integer" default="100">
+  Number of users (max 500)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Offset for pagination
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "id": "user-guid",
+      "userName": "player1",
+      "email": "player1@example.com",
+      "role": "User",
+      "emailConfirmed": true,
+      "registerTimeUtc": "2025-01-15T10:00:00Z"
+    }
+  ],
+  "total": 250
+}
+```
+</ResponseExample>
+
+### Search Users
+
+Search users by username, email, real name, student number, or ID.
+
+#### POST /api/admin/users/search
+
+<ParamField query="hint" type="string" required>
+  Search query (case-insensitive, returns up to 30 results)
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "id": "user-guid",
+      "userName": "player1",
+      "email": "player1@example.com",
+      "realName": "John Doe",
+      "stdNumber": "STU12345"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+### Get User Details
+
+Retrieve detailed user information.
+
+#### GET /api/admin/users/{userid}
+
+<ParamField path="userid" type="string" required>
+  User UUID
+</ParamField>
+
+### Update User
+
+Modify user information.
+
+#### PUT /api/admin/users/{userid}
+
+<ParamField path="userid" type="string" required>
+  User UUID
+</ParamField>
+
+<ParamField body="userName" type="string">
+  New username
+</ParamField>
+
+<ParamField body="email" type="string">
+  New email address
+</ParamField>
+
+<ParamField body="bio" type="string">
+  User biography
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Phone number
+</ParamField>
+
+<ParamField body="realName" type="string">
+  Real name
+</ParamField>
+
+<ParamField body="stdNumber" type="string">
+  Student/ID number
+</ParamField>
+
+<ParamField body="role" type="string">
+  User role: `Banned`, `User`, `Monitor`, `Admin`
+</ParamField>
+
+<ParamField body="emailConfirmed" type="boolean">
+  Email confirmation status
+</ParamField>
+
+### Batch Add Users
+
+Create multiple users at once.
+
+#### POST /api/admin/users
+
+<ParamField body="users" type="array" required>
+  Array of user creation objects
+</ParamField>
+
+<ResponseExample>
+```json Request
+[
+  {
+    "userName": "student1",
+    "email": "student1@edu.com",
+    "password": "defaultPassword123",
+    "realName": "Alice Smith",
+    "stdNumber": "2024001",
+    "teamName": "Team A"
+  },
+  {
+    "userName": "student2",
+    "email": "student2@edu.com",
+    "password": "defaultPassword123",
+    "teamName": "Team A"
+  }
+]
+```
+</ResponseExample>
+
+<Info>
+  Users with the same `teamName` will be automatically grouped into teams.
+</Info>
+
+### Reset User Password
+
+Generate and return a new random password for a user.
+
+#### DELETE /api/admin/users/{userid}/password
+
+<ParamField path="userid" type="string" required>
+  User UUID
+</ParamField>
+
+<ResponseExample>
+```json Response
+"NewRandomPass123"
+```
+</ResponseExample>
+
+<Warning>
+  The generated password is shown only once. Save it securely.
+</Warning>
+
+### Delete User
+
+Permanently delete a user account.
+
+#### DELETE /api/admin/users/{userid}
+
+<ParamField path="userid" type="string" required>
+  User UUID
+</ParamField>
+
+<Warning>
+  Cannot delete team captains. Transfer team ownership first.
+</Warning>
+
+## Team Management
+
+### List Teams
+
+Retrieve paginated list of teams.
+
+#### GET /api/admin/teams
+
+<ParamField query="count" type="integer" default="100">
+  Number of teams (max 500)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Offset for pagination
+</ParamField>
+
+### Search Teams
+
+Search teams by name or ID.
+
+#### POST /api/admin/teams/search
+
+<ParamField query="hint" type="string" required>
+  Search query
+</ParamField>
+
+### Update Team
+
+Modify team information.
+
+#### PUT /api/admin/teams/{id}
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+<ParamField body="name" type="string">
+  Team name
+</ParamField>
+
+<ParamField body="bio" type="string">
+  Team biography
+</ParamField>
+
+<ParamField body="locked" type="boolean">
+  Lock status (prevents roster changes)
+</ParamField>
+
+### Delete Team
+
+Permanently delete a team.
+
+#### DELETE /api/admin/teams/{id}
+
+<ParamField path="id" type="integer" required>
+  Team ID
+</ParamField>
+
+## Participation Management
+
+### Update Participation
+
+Modify team participation in a game (approve/reject/ban).
+
+#### PUT /api/admin/participation/{id}
+
+<ParamField path="id" type="integer" required>
+  Participation ID
+</ParamField>
+
+<ParamField body="status" type="string">
+  New status: `Pending`, `Accepted`, `Rejected`, `Suspended`
+</ParamField>
+
+<ParamField body="organization" type="string">
+  Team organization/affiliation
+</ParamField>
+
+<ResponseExample>
+```json Request
+{
+  "status": "Accepted",
+  "organization": "University A"
+}
+```
+</ResponseExample>
+
+## Writeups
+
+### Get Writeups
+
+Retrieve all writeup submissions for a game.
+
+#### GET /api/admin/writeups/{id}
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "writeups": [
+    {
+      "team": {
+        "id": 42,
+        "name": "Team Alpha"
+      },
+      "file": "writeups/game1_team42.pdf",
+      "uploadTimeUtc": "2026-03-20T15:00:00Z",
+      "fileSize": 2048000
+    }
+  ]
+}
+```
+</ResponseExample>
+
+### Download All Writeups
+
+Download all writeups as a TAR archive.
+
+#### GET /api/admin/writeups/{id}/all
+
+<ParamField path="id" type="integer" required>
+  Game ID
+</ParamField>
+
+<Info>
+  Returns a downloadable `.tar` file containing all submitted writeups.
+</Info>
+
+## Container Management
+
+### List Containers
+
+Retrieve all active container instances.
+
+#### GET /api/admin/instances
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "containerId": "abc123def456",
+      "image": "ctf/web-challenge:latest",
+      "team": "Team Alpha",
+      "challenge": "SQL Injection 101",
+      "entry": "http://ctf.local:31337",
+      "startedAt": "2026-03-01T10:00:00Z",
+      "expectStopAt": "2026-03-01T12:00:00Z"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+### Destroy Container
+
+Forcibly stop and remove a container instance.
+
+#### DELETE /api/admin/instances/{id}
+
+<ParamField path="id" type="string" required>
+  Container UUID
+</ParamField>
+
+<Warning>
+  This forcibly terminates the container. Use with caution during active games.
+</Warning>
+
+## File Management
+
+### List Files
+
+Retrieve uploaded files (attachments, avatars, etc.).
+
+#### GET /api/admin/files
+
+<ParamField query="count" type="integer" default="50">
+  Number of files (max 500)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Offset for pagination
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "hash": "abc123def456...",
+      "name": "challenge-attachment.zip",
+      "size": 1048576,
+      "uploadTimeUtc": "2026-02-15T14:00:00Z",
+      "type": "Attachment"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Logs
+
+### View System Logs
+
+Retrieve platform logs.
+
+#### GET /api/admin/logs
+
+<ParamField query="level" type="string" default="All">
+  Log level filter: `All`, `Information`, `Warning`, `Error`
+</ParamField>
+
+<ParamField query="count" type="integer" default="50">
+  Number of log entries (max 1000)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Offset for pagination
+</ParamField>
+
+<ResponseExample>
+```json Response
+[
+  {
+    "time": "2026-03-01T12:30:45Z",
+    "level": "Information",
+    "logger": "GZCTF.Controllers.GameController",
+    "message": "User joined game: Team Alpha -> Spring CTF 2026",
+    "status": "Success"
+  },
+  {
+    "time": "2026-03-01T12:25:10Z",
+    "level": "Warning",
+    "logger": "GZCTF.Services.Container",
+    "message": "Container startup delayed",
+    "status": "Pending"
+  }
+]
+```
+</ResponseExample>
+
+## Game Export/Import
+
+See the [Edit API](/api/admin#edit-endpoints) section for game export and import endpoints.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Edit API" icon="pen" href="/api/admin#edit-endpoints">
+    Game and challenge editing
+  </Card>
+  <Card title="Game API" icon="gamepad" href="/api/game">
+    Game management operations
+  </Card>
+</CardGroup>

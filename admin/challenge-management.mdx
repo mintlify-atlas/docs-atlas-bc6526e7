@@ -1,0 +1,547 @@
+---
+title: Challenge Management
+description: Create and configure CTF challenges with dynamic containers, attachments, and flags
+icon: puzzle-piece
+---
+
+Challenges are the core of any CTF competition. GZCTF supports multiple challenge types with sophisticated flag validation and container orchestration.
+
+## Challenge Types
+
+GZCTF supports five distinct challenge types:
+
+<CardGroup cols={2}>
+  <Card title="Static Attachment" icon="paperclip">
+    Single attachment file with fixed flags. Perfect for reverse engineering, forensics, or cryptography challenges.
+  </Card>
+  
+  <Card title="Dynamic Attachment" icon="rotate">
+    Unique attachment per team generated from templates. Prevents flag sharing between teams.
+  </Card>
+  
+  <Card title="Static Container" icon="cube">
+    Shared Docker container with fixed flags. Suitable for web exploitation or network services.
+  </Card>
+  
+  <Card title="Dynamic Container" icon="cubes">
+    Individual container per team with unique flags. Maximum isolation and fairness for pwn/web challenges.
+  </Card>
+  
+  <Card title="Static Content" icon="file-lines">
+    No files or containers—challenge info is in the description. Used for OSINT or trivia.
+  </Card>
+</CardGroup>
+
+## Creating Challenges
+
+<Steps>
+  <Step title="Navigate to Game Challenges">
+    Open the game in admin panel, go to **Challenges** tab, and click **Add Challenge**.
+  </Step>
+  
+  <Step title="Set Basic Properties">
+    <ParamField path="Title" type="string" required>
+      Challenge name displayed to participants
+    </ParamField>
+    
+    <ParamField path="Category" type="enum" required>
+      Category classification:
+      - `Web` - Web exploitation
+      - `Pwn` - Binary exploitation
+      - `Reverse` - Reverse engineering
+      - `Crypto` - Cryptography
+      - `Forensics` - Digital forensics
+      - `Misc` - Miscellaneous
+      - `Hardware` - Hardware hacking
+      - `Mobile` - Mobile security
+      - `PPC` - Programming challenges
+      - `Blockchain` - Web3/blockchain
+      - `AI` - Artificial intelligence
+    </ParamField>
+    
+    <ParamField path="Type" type="enum" required>
+      Challenge type (see above section)
+    </ParamField>
+  </Step>
+  
+  <Step title="Configure Challenge Content">
+    <ParamField path="Content" type="string">
+      Markdown-formatted challenge description, hints, and connection information
+    </ParamField>
+  </Step>
+</Steps>
+
+## Scoring Configuration
+
+### Dynamic Scoring System
+
+GZCTF implements dynamic scoring where challenge points decrease as more teams solve them:
+
+<ParamField path="OriginalScore" type="integer" default={500}>
+  Initial point value before any solves
+</ParamField>
+
+<ParamField path="MinScoreRate" type="double" default={0.4}>
+  Minimum score as a fraction of original (e.g., 0.4 = 40% minimum)
+</ParamField>
+
+<ParamField path="Difficulty" type="double" default={3.0}>
+  Controls how quickly score decreases. Higher values = slower decay.
+</ParamField>
+
+<CodeGroup>
+```python Score Calculation Formula
+def calculate_score(original_score, min_score_rate, difficulty, solved_count):
+    """
+    Calculate dynamic challenge score based on solve count
+    """
+    min_score = original_score * min_score_rate
+    current_score = (
+        (original_score - min_score) * 
+        (difficulty / (solved_count + difficulty)) +
+        min_score
+    )
+    return max(int(current_score), min_score)
+
+# Example: 500pt challenge, 40% min, difficulty 3
+print(calculate_score(500, 0.4, 3.0, 0))   # 500 (no solves)
+print(calculate_score(500, 0.4, 3.0, 3))   # 350 (3 solves)
+print(calculate_score(500, 0.4, 3.0, 10))  # 238 (10 solves)
+print(calculate_score(500, 0.4, 3.0, 50))  # 200 (minimum)
+```
+</CodeGroup>
+
+<Tip>
+  Use higher difficulty values (5-10) for easy challenges to keep them valuable longer. Use lower values (1-2) for hard challenges.
+</Tip>
+
+### Blood Bonus
+
+<ParamField path="DisableBloodBonus" type="boolean" default={false}>
+  Disable blood bonus for this specific challenge (bonus still applies to other challenges)
+</ParamField>
+
+## Flag Management
+
+Flags are the answers teams submit to earn points.
+
+### Static Flags
+
+For static challenge types, add one or more flags manually:
+
+<Steps>
+  <Step title="Add Flag">
+    Click **Add Flag** in the challenge edit page
+  </Step>
+  
+  <Step title="Configure Flag">
+    <ParamField path="Flag" type="string" required>
+      The flag value (e.g., `flag{this_is_a_flag}`)
+    </ParamField>
+    
+    <ParamField path="Type" type="enum" default="Text">
+      - `Text` - Exact string match (case-insensitive)
+      - `RegExp` - Regular expression pattern
+    </ParamField>
+  </Step>
+</Steps>
+
+<CodeGroup>
+```regex Example: Pattern Flag
+# Accept multiple formats
+flag\{[a-f0-9]{32}\}
+
+# Flexible spacing
+flag\{\s*welcome[_\s]*to[_\s]*gzctf\s*\}
+```
+
+```text Example: Text Flags
+# Multiple accepted answers
+flag{welcome_to_gzctf}
+flag{GZCTF_IS_AWESOME}
+```
+</CodeGroup>
+
+### Dynamic Flags
+
+For dynamic container/attachment challenges, use flag templates:
+
+<ParamField path="FlagTemplate" type="string" required>
+  Template with placeholders for unique flag generation:
+  - `[TEAM_HASH]` - Unique team identifier
+  - `[GAME_ID]` - Game identifier
+  - `[CHALLENGE_ID]` - Challenge identifier
+</ParamField>
+
+<CodeGroup>
+```text Example Templates
+# Basic team-unique flag
+flag{[TEAM_HASH]}
+
+# Complex format
+flag{team_[TEAM_HASH]_game_[GAME_ID]_challenge_[CHALLENGE_ID]}
+
+# Realistic-looking flags
+GZCTF{[TEAM_HASH]_c0ngr4tul4t10ns}
+```
+</CodeGroup>
+
+<Warning>
+  Flag templates must not be too simple. The system validates that `[TEAM_HASH]` is included to prevent static flags disguised as dynamic ones.
+</Warning>
+
+## Container Configuration
+
+For container-based challenges (Static/Dynamic Container):
+
+### Container Image
+
+<ParamField path="ContainerImage" type="string" required>
+  Docker image name with tag (e.g., `gzctf/web-challenge:latest`)
+</ParamField>
+
+<Steps>
+  <Step title="Prepare Image">
+    Build your challenge image and push to a container registry (Docker Hub, GHCR, private registry)
+  </Step>
+  
+  <Step title="Configure Exposed Port">
+    <ParamField path="ExposePort" type="integer" required>
+      Port your service listens on inside the container
+    </ParamField>
+  </Step>
+</Steps>
+
+### Resource Limits
+
+Prevent resource exhaustion:
+
+<ParamField path="MemoryLimit" type="integer" default={64}>
+  Memory limit in MB (range: 32-1048576)
+</ParamField>
+
+<ParamField path="CPUCount" type="integer" default={1}>
+  CPU limit in 0.1 CPU units (e.g., 10 = 1.0 CPU, 5 = 0.5 CPU)
+</ParamField>
+
+<ParamField path="StorageLimit" type="integer" default={256}>
+  Disk storage limit in MB (range: 0-1048576)
+</ParamField>
+
+<CodeGroup>
+```yaml Example: Lightweight Web Challenge
+ContainerImage: myregistry/web-chall:v1
+MemoryLimit: 128        # 128 MB RAM
+CPUCount: 5             # 0.5 CPU cores  
+StorageLimit: 512       # 512 MB disk
+ExposePort: 80
+```
+
+```yaml Example: Heavy PWN Challenge
+ContainerImage: myregistry/pwn-chall:v1
+MemoryLimit: 512        # 512 MB RAM
+CPUCount: 10            # 1.0 CPU core
+StorageLimit: 1024      # 1 GB disk
+ExposePort: 9999
+```
+</CodeGroup>
+
+### Network Mode
+
+<ParamField path="NetworkMode" type="enum" default="Open">
+  - `Open` - Full internet access
+  - `Isolated` - No external network access
+  - `DNS` - DNS resolution only
+</ParamField>
+
+<Tip>
+  Use `Isolated` for challenges that don't need internet to prevent container escape or exfiltration attacks.
+</Tip>
+
+### Traffic Capture
+
+<ParamField path="EnableTrafficCapture" type="boolean" default={false}>
+  Record all network traffic for forensics/monitoring. Only available for container challenges.
+</ParamField>
+
+<Info>
+  Captured traffic is stored as PCAP files accessible to admins for cheat detection or debugging.
+</Info>
+
+## Attachment Management
+
+### Static Attachments
+
+For Static Attachment/Container challenges:
+
+<Steps>
+  <Step title="Upload File">
+    Click **Update Attachment** and select your file
+  </Step>
+  
+  <Step title="Configure Display Name">
+    <ParamField path="AttachmentType" type="enum">
+      - `Remote` - File on external server (provide URL)
+      - `Local` - File stored in GZCTF
+    </ParamField>
+  </Step>
+</Steps>
+
+### Dynamic Attachments
+
+For Dynamic Attachment challenges:
+
+<ParamField path="FileName" type="string" required>
+  Base filename for generated attachments (e.g., `challenge.zip`)
+</ParamField>
+
+<Steps>
+  <Step title="Prepare Template Package">
+    Create a ZIP archive containing:
+    - Challenge files
+    - Template files with `[TEAM_HASH]` placeholders
+  </Step>
+  
+  <Step title="Upload Template">
+    System generates unique attachments per team by replacing placeholders
+  </Step>
+</Steps>
+
+## Advanced Features
+
+### Submission Limits
+
+<ParamField path="SubmissionLimit" type="integer" default={0}>
+  Maximum flag submissions per team (0 = unlimited). Useful for preventing brute-force attacks.
+</ParamField>
+
+<CodeGroup>
+```yaml Example: Guessing Challenge
+SubmissionLimit: 5      # Only 5 attempts allowed
+```
+</CodeGroup>
+
+### Challenge Deadline
+
+<ParamField path="DeadlineUtc" type="datetime">
+  Optional deadline before game end. Challenge becomes inaccessible after this time.
+</ParamField>
+
+### Hints System
+
+<ParamField path="Hints" type="array[string]">
+  Progressive hints revealed at scheduled times or costs
+</ParamField>
+
+<Steps>
+  <Step title="Add Hints">
+    Add multiple hint strings in the challenge editor
+  </Step>
+  
+  <Step title="Automatic Notification">
+    When hints are updated during an active game, a system notice is automatically published
+  </Step>
+</Steps>
+
+## Testing Challenges
+
+### Container Test Mode
+
+Before enabling a challenge, test containers:
+
+<Steps>
+  <Step title="Create Test Container">
+    Click **Test Container** button in challenge editor
+  </Step>
+  
+  <Step title="Verify Functionality">
+    - Check service responds on exposed port
+    - Verify dynamic flags are correctly generated
+    - Test flag submission
+  </Step>
+  
+  <Step title="Destroy Test Instance">
+    Click **Destroy Test Container** when testing is complete
+  </Step>
+</Steps>
+
+<Warning>
+  Test containers use admin resources and count toward your container quotas. Remember to destroy them after testing.
+</Warning>
+
+## Enabling Challenges
+
+<ParamField path="IsEnabled" type="boolean" default={false}>
+  Make challenge visible and solvable by participants
+</ParamField>
+
+<Steps>
+  <Step title="Validate Configuration">
+    Before enabling, system checks:
+    - At least one flag exists (for non-dynamic challenges)
+    - Container image is configured (for container challenges)
+    - Flag template is valid (for dynamic challenges)
+  </Step>
+  
+  <Step title="Enable Challenge">
+    Toggle **IsEnabled** to `true`
+  </Step>
+  
+  <Step title="Container Initialization">
+    For container challenges, system pre-creates instances for faster deployment
+  </Step>
+</Steps>
+
+<Info>
+  When enabled during an active game, a system notice "New challenge available: [Title]" is automatically broadcast.
+</Info>
+
+## Bulk Operations
+
+### Export/Import Games
+
+Export entire games including all challenges:
+
+<CodeGroup>
+```bash Export Game
+curl -X POST https://your-gzctf.com/api/edit/games/1/export \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -o game-backup.zip
+```
+
+```bash Import Game  
+curl -X POST https://your-gzctf.com/api/edit/games/import \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@game-backup.zip"
+```
+</CodeGroup>
+
+### Delete Challenge
+
+<Warning>
+  Deleting a challenge also removes:
+  - All flags
+  - Submission history
+  - Container instances
+  - Team progress for that challenge
+  
+  This action is **irreversible**.
+</Warning>
+
+## API Reference
+
+<AccordionGroup>
+  <Accordion title="POST /api/edit/games/{id}/challenges" icon="plus">
+    Create new challenge. Returns challenge ID and details.
+  </Accordion>
+  
+  <Accordion title="GET /api/edit/games/{id}/challenges/{cId}" icon="eye">
+    Get detailed challenge configuration including flags (except dynamic container flags).
+  </Accordion>
+  
+  <Accordion title="PUT /api/edit/games/{id}/challenges/{cId}" icon="pen">
+    Update challenge settings. Flags are managed separately via flag endpoints.
+  </Accordion>
+  
+  <Accordion title="DELETE /api/edit/games/{id}/challenges/{cId}" icon="trash">
+    Permanently delete challenge and all related data.
+  </Accordion>
+  
+  <Accordion title="POST /api/edit/games/{id}/challenges/{cId}/flags" icon="flag">
+    Add one or more flags to the challenge.
+  </Accordion>
+  
+  <Accordion title="DELETE /api/edit/games/{id}/challenges/{cId}/flags/{fId}" icon="trash">
+    Remove a specific flag.
+  </Accordion>
+  
+  <Accordion title="POST /api/edit/games/{id}/challenges/{cId}/attachment" icon="paperclip">
+    Upload or update challenge attachment.
+  </Accordion>
+  
+  <Accordion title="POST /api/edit/games/{id}/challenges/{cId}/container" icon="play">
+    Create test container instance.
+  </Accordion>
+  
+  <Accordion title="DELETE /api/edit/games/{id}/challenges/{cId}/container" icon="stop">
+    Destroy test container instance.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Test Thoroughly" icon="flask">
+    Always test challenges before enabling:
+    - Verify flags work
+    - Check container stability
+    - Test resource limits
+  </Card>
+  
+  <Card title="Set Appropriate Resources" icon="gauge">
+    Balance between:
+    - Challenge needs
+    - Infrastructure capacity
+    - Participant experience
+  </Card>
+  
+  <Card title="Use Dynamic Flags" icon="shield">
+    For serious competitions, use dynamic flags to prevent:
+    - Flag sharing
+    - Early leaks
+    - Unfair advantages
+  </Card>
+  
+  <Card title="Clear Descriptions" icon="book">
+    Include in challenge content:
+    - Connection information
+    - Expected flag format
+    - Difficulty hints
+    - Author credits
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot enable challenge">
+    Check error message:
+    - "No flags": Add at least one flag
+    - "Container config error": Verify image and port settings
+    - "Flag template invalid": Ensure `[TEAM_HASH]` is included
+  </Accordion>
+  
+  <Accordion title="Container won't start">
+    Verify:
+    - Image exists in registry
+    - Registry credentials configured (if private)
+    - Resource limits are reasonable
+    - Container provider is running
+  </Accordion>
+  
+  <Accordion title="Dynamic flags not working">
+    Confirm:
+    - Flag template includes `[TEAM_HASH]`
+    - Challenge type is Dynamic Container/Attachment
+    - Container/attachment generates flag correctly
+  </Accordion>
+  
+  <Accordion title="Attachments not downloading">
+    Check:
+    - File was uploaded successfully
+    - Storage backend is accessible
+    - File permissions are correct
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Team Management" icon="users" href="/admin/team-management">
+    Manage participant registrations
+  </Card>
+  
+  <Card title="Monitoring" icon="chart-line" href="/admin/monitoring">
+    Monitor competition progress
+  </Card>
+</CardGroup>

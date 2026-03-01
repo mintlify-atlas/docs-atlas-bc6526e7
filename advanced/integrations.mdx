@@ -1,0 +1,682 @@
+---
+title: Third-Party Integrations
+description: OpenTelemetry observability, S3/MinIO storage, SMTP email, and monitoring integrations
+---
+
+GZCTF integrates with various external services to provide enterprise-grade observability, storage, and communication capabilities. This guide covers all supported integrations and their configuration.
+
+## OpenTelemetry Observability
+
+GZCTF uses OpenTelemetry for distributed tracing, metrics collection, and logging.
+
+### Configuration
+
+Enable telemetry in `appsettings.json`:
+
+```json
+{
+  "Telemetry": {
+    "Enable": true,
+    "OpenTelemetry": {
+      "Enable": true,
+      "EndpointUri": "http://localhost:4317",
+      "Protocol": "Grpc"  // or "HttpProtobuf"
+    },
+    "Prometheus": {
+      "Enable": true,
+      "TotalNameSuffixForCounters": true
+    },
+    "Console": {
+      "Enable": false  // Debug only
+    },
+    "AzureMonitor": {
+      "Enable": false,
+      "ConnectionString": ""
+    }
+  }
+}
+```
+
+Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:26-29`
+
+### Metrics Collection
+
+GZCTF exports the following metric types:
+
+<AccordionGroup>
+  <Accordion title="ASP.NET Core Metrics" icon="globe">
+    **Exported Metrics**:
+    - `http.server.request.duration` - Request latency histogram
+    - `http.server.active_requests` - Current active requests
+    - `http.server.request.body.size` - Request body size
+    - `http.server.response.body.size` - Response body size
+    
+    ```csharp
+    metrics.AddAspNetCoreInstrumentation();
+    ```
+    
+    Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:40`
+  </Accordion>
+
+  <Accordion title="HTTP Client Metrics" icon="arrow-right-arrow-left">
+    **Exported Metrics**:
+    - `http.client.request.duration` - Outbound request latency
+    - `http.client.request.body.size` - Outbound request size
+    - `http.client.response.body.size` - Inbound response size
+    
+    Tracks all HttpClient requests (registry, webhooks, etc.)
+    
+    ```csharp
+    metrics.AddHttpClientInstrumentation();
+    ```
+    
+    Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:41`
+  </Accordion>
+
+  <Accordion title="Runtime Metrics" icon="microchip">
+    **Exported Metrics**:
+    - `process.runtime.dotnet.gc.collections.count` - GC collections
+    - `process.runtime.dotnet.gc.heap.size` - Heap size
+    - `process.runtime.dotnet.gc.duration` - GC pause time
+    - `process.runtime.dotnet.thread.count` - Thread count
+    - `process.runtime.dotnet.exception.count` - Exception rate
+    
+    ```csharp
+    metrics.AddRuntimeInstrumentation();
+    ```
+    
+    Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:42`
+  </Accordion>
+
+  <Accordion title="Database Metrics" icon="database">
+    **PostgreSQL Metrics**:
+    - `npgsql.db.command.duration` - Query execution time
+    - `npgsql.db.connection.count` - Connection pool stats
+    - `npgsql.db.command.error.count` - Query errors
+    
+    ```csharp
+    metrics.AddNpgsqlInstrumentation();
+    ```
+    
+    Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:44`
+  </Accordion>
+
+  <Accordion title="AWS SDK Metrics" icon="aws">
+    Tracks S3 operations when using S3 storage backend.
+    
+    ```csharp
+    metrics.AddAWSInstrumentation();
+    ```
+    
+    Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:45`
+  </Accordion>
+
+  <Accordion title="Health Check Metrics" icon="heart-pulse">
+    **Exported Metrics**:
+    - `health_check_status` - Health check results (0=unhealthy, 1=healthy)
+    - `health_check_duration` - Health check execution time
+    
+    Includes Storage, Cache, and Database health.
+    
+    ```csharp
+    metrics.AddMeter("Microsoft.Extensions.Diagnostics.HealthChecks");
+    ```
+    
+    Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:46`
+  </Accordion>
+</AccordionGroup>
+
+### Distributed Tracing
+
+Tracing captures request flows across services:
+
+```csharp Trace Instrumentation
+tracing.AddAspNetCoreInstrumentation();        // HTTP requests
+tracing.AddHttpClientInstrumentation();        // Outbound HTTP
+tracing.AddEntityFrameworkCoreInstrumentation(); // Database queries
+tracing.AddRedisInstrumentation();             // Cache operations
+tracing.AddNpgsql();                           // PostgreSQL specific
+tracing.AddAWSInstrumentation();               // S3 operations
+tracing.AddGrpcClientInstrumentation();        // gRPC calls
+```
+
+**Trace Example**:
+```
+HTTP POST /api/game/42/submit
+├─ DB Query: SELECT * FROM instances WHERE team_id = ?
+├─ Redis GET: cache:flag:abc123
+└─ HTTP POST: https://webhook.site/... (notification)
+```
+
+Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:59-71`
+
+### Prometheus Exporter
+
+Expose metrics for Prometheus scraping:
+
+```yaml docker-compose.yml
+services:
+  gzctf:
+    ports:
+      - "8080:8080"   # Main HTTP port
+      - "3030:3030"   # Metrics port
+```
+
+**Scrape Configuration**:
+```yaml prometheus.yml
+scrape_configs:
+  - job_name: 'gzctf'
+    static_configs:
+      - targets: ['gzctf:3030']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+```
+
+**Health Check Endpoint**:
+```bash
+curl http://localhost:3030/healthz
+
+{
+  "status": "Healthy",
+  "totalDuration": "00:00:00.0234567",
+  "entries": {
+    "Storage": { "status": "Healthy" },
+    "Cache": { "status": "Healthy" },  
+    "Database": { "status": "Healthy" }
+  }
+}
+```
+
+Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:95-102`
+
+### OTLP Exporters
+
+Send telemetry to OpenTelemetry collectors:
+
+<CodeGroup>
+```json Jaeger (Traces)
+{
+  "Telemetry": {
+    "OpenTelemetry": {
+      "Enable": true,
+      "EndpointUri": "http://jaeger:4317",
+      "Protocol": "Grpc"
+    }
+  }
+}
+```
+
+```json Grafana Loki (Logs)
+{
+  "Serilog": {
+    "WriteTo": [
+      {
+        "Name": "GrafanaLoki",
+        "Args": {
+          "uri": "http://loki:3100",
+          "labels": [
+            { "key": "app", "value": "gzctf" }
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+```json Azure Monitor
+{
+  "Telemetry": {
+    "AzureMonitor": {
+      "Enable": true,
+      "ConnectionString": "InstrumentationKey=..."
+    }
+  }
+}
+```
+</CodeGroup>
+
+Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:73-90`
+
+## Storage Backends
+
+GZCTF supports multiple storage backends for challenges, writeups, and traffic captures.
+
+### Local File Storage
+
+```json
+{
+  "Storage": {
+    "Type": "Local",
+    "ConnectionString": "files"
+  }
+}
+```
+
+**Directory Structure**:
+```
+files/
+├─ attachments/     # Challenge files
+├─ avatars/         # User avatars
+├─ capture/         # Traffic PCAP files
+└─ writeups/        # Team writeups
+```
+
+<Note>
+Local storage is suitable for development and small competitions. For production, use S3 or Azure Blob.
+</Note>
+
+### Amazon S3 / MinIO
+
+S3-compatible object storage for scalable file hosting:
+
+```json
+{
+  "Storage": {
+    "Type": "S3",
+    "ConnectionString": "S3:Endpoint=https://s3.amazonaws.com;Region=us-east-1;Bucket=gzctf-storage;AccessKey=AKIAIOSFODNN7EXAMPLE;SecretKey=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  }
+}
+```
+
+**MinIO Configuration**:
+```json
+{
+  "Storage": {
+    "Type": "S3",
+    "ConnectionString": "S3:Endpoint=http://minio:9000;Region=us-east-1;Bucket=gzctf;AccessKey=minioadmin;SecretKey=minioadmin;ForcePathStyle=true"
+  }
+}
+```
+
+**S3 Bucket Policy**:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::gzctf-storage/attachments/*"
+    }
+  ]
+}
+```
+
+Reference: `/src/GZCTF/Storage/S3BlobStorage.cs:1-385`
+
+### Storage Features
+
+All storage backends implement `IBlobStorage`:
+
+```csharp Storage Operations
+public interface IBlobStorage
+{
+    Task WriteAsync(string path, Stream content, bool append = false);
+    Task<Stream> OpenReadAsync(string path);
+    Task<string> ReadTextAsync(string path);
+    Task DeleteAsync(string path);
+    Task<bool> ExistsAsync(string path);
+    Task<StorageItem> GetBlobAsync(string path);
+    Task<IReadOnlyList<StorageItem>> ListAsync(string path, bool useFlatListing = false);
+    Task<int> CountAsync(string path);
+}
+```
+
+**Atomic Operations**:
+- S3: Uses `PutObject` for atomic writes
+- Local: Uses `FileStream` with `FileMode.Create`
+
+**Concurrency**:
+- Thread-safe via async I/O
+- No file locking issues
+- Safe for multi-instance deployments
+
+## Email Configuration (SMTP)
+
+GZCTF uses SMTP for account verification, password resets, and email changes.
+
+### Basic Configuration
+
+```json
+{
+  "EmailConfig": {
+    "SenderAddress": "noreply@ctf.example.com",
+    "SenderName": "CTF Platform",
+    "UserName": "apikey",
+    "Password": "SG.xxx",  // SendGrid API key
+    "Smtp": {
+      "Host": "smtp.sendgrid.net",
+      "Port": 587,
+      "BypassCertVerify": false
+    }
+  },
+  "AccountPolicy": {
+    "EmailConfirmationRequired": true
+  }
+}
+```
+
+### Provider Examples
+
+<AccordionGroup>
+  <Accordion title="SendGrid" icon="envelope">
+    ```json
+    {
+      "EmailConfig": {
+        "SenderAddress": "noreply@ctf.example.com",
+        "UserName": "apikey",
+        "Password": "SG.xxxxxxxxxxxx",
+        "Smtp": {
+          "Host": "smtp.sendgrid.net",
+          "Port": 587
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Gmail" icon="google">
+    ```json
+    {
+      "EmailConfig": {
+        "SenderAddress": "your-email@gmail.com",
+        "UserName": "your-email@gmail.com",
+        "Password": "app-specific-password",
+        "Smtp": {
+          "Host": "smtp.gmail.com",
+          "Port": 587
+        }
+      }
+    }
+    ```
+    
+    <Note>
+    Use [App Passwords](https://support.google.com/accounts/answer/185833) instead of your regular password.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Mailgun" icon="mailbox">
+    ```json
+    {
+      "EmailConfig": {
+        "SenderAddress": "noreply@mail.ctf.example.com",
+        "UserName": "postmaster@mail.ctf.example.com",
+        "Password": "mailgun-smtp-password",
+        "Smtp": {
+          "Host": "smtp.mailgun.org",
+          "Port": 587
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Office 365" icon="microsoft">
+    ```json
+    {
+      "EmailConfig": {
+        "SenderAddress": "noreply@ctf.example.com",
+        "UserName": "noreply@ctf.example.com",
+        "Password": "your-password",
+        "Smtp": {
+          "Host": "smtp.office365.com",
+          "Port": 587
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Mail Sender Architecture
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Controller
+    participant MailSender
+    participant Queue
+    participant Worker
+    participant SMTP
+    
+    User->>Controller: Request password reset
+    Controller->>MailSender: SendResetPasswordUrl()
+    MailSender->>Queue: Enqueue MailContent
+    MailSender-->>Controller: true (queued)
+    Controller-->>User: 200 OK
+    
+    Queue->>Worker: Dequeue MailContent
+    Worker->>SMTP: Connect & Authenticate
+    Worker->>SMTP: Send email
+    SMTP-->>Worker: 250 OK
+    Worker->>SMTP: Disconnect
+```
+
+**Mail Queue**:
+- Async background worker processes emails
+- Prevents blocking API requests
+- Automatic retry on transient failures
+- Connection pooling for efficiency
+
+Reference: `/src/GZCTF/Services/Mail/MailSender.cs:151-186`
+
+### Email Templates
+
+GZCTF uses customizable HTML email templates:
+
+```csharp Mail Types
+public enum MailType
+{
+    ConfirmEmail,    // Account verification
+    ChangeEmail,     // Email change confirmation
+    ResetPassword    // Password reset
+}
+```
+
+**Template Variables**:
+```html
+{title}        - Email subject
+{information}  - Main message content
+{btnmsg}       - Button text
+{email}        - Recipient email
+{userName}     - Recipient username
+{url}          - Action URL (verification/reset link)
+{nowtime}      - Timestamp
+{platform}     - Platform name (e.g., "GZ::CTF")
+```
+
+Reference: `/src/GZCTF/Services/Mail/MailSender.cs:84-97`
+
+### Certificate Validation
+
+```csharp SSL Certificate Handling
+_smtpClient.ServerCertificateValidationCallback = (_, _, _, errors)
+    => errors is SslPolicyErrors.None 
+    || options.Value.Smtp?.BypassCertVerify is true;
+```
+
+<Warning>
+**Security**: Only use `BypassCertVerify: true` for development with self-signed certificates. Always validate certificates in production.
+</Warning>
+
+Reference: `/src/GZCTF/Services/Mail/MailSender.cs:52-53`
+
+### TLS Configuration
+
+For legacy SMTP servers with weak ciphers:
+
+```csharp Cipher Suite Policy
+if (!OperatingSystem.IsWindows())
+{
+    _smtpClient.SslCipherSuitesPolicy = new CipherSuitesPolicy(
+        Enum.GetValues<TlsCipherSuite>()
+            .Where(cipher =>
+            {
+                var cipherName = cipher.ToString();
+                // Exclude MD5, SHA1, and NULL ciphers
+                return !cipherName.EndsWith("MD5") 
+                    && !cipherName.EndsWith("SHA") 
+                    && !cipherName.EndsWith("NULL");
+            })
+    );
+}
+```
+
+This allows connecting to older SMTP servers while maintaining security.
+
+Reference: `/src/GZCTF/Services/Mail/MailSender.cs:40-50`
+
+## Monitoring Stack Example
+
+### Docker Compose Setup
+
+```yaml docker-compose.yml
+services:
+  gzctf:
+    image: gztime/gzctf:latest
+    environment:
+      - Telemetry__Enable=true
+      - Telemetry__OpenTelemetry__EndpointUri=http://otel-collector:4317
+    ports:
+      - "8080:8080"
+      - "3030:3030"
+  
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+  
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+  
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+  
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+
+volumes:
+  grafana-data:
+```
+
+### OpenTelemetry Collector Config
+
+```yaml otel-collector-config.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 10s
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+  logging:
+    loglevel: info
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch, memory_limiter]
+      exporters: [prometheus]
+    traces:
+      receivers: [otlp]
+      processors: [batch, memory_limiter]
+      exporters: [jaeger, logging]
+```
+
+### Grafana Dashboards
+
+**Example Metrics Queries**:
+
+```promql
+# Request rate
+rate(http_server_request_duration_count[5m])
+
+# P95 latency
+histogram_quantile(0.95, 
+  rate(http_server_request_duration_bucket[5m])
+)
+
+# Active containers
+gzctf_container_count{status="running"}
+
+# Flag submission rate
+rate(gzctf_submission_total[5m])
+
+# Database connection pool
+npgsql_db_connection_count{state="used"}
+```
+
+## Health Checks
+
+GZCTF implements comprehensive health checks:
+
+```csharp Health Check Registration
+builder.Services.AddHealthChecks()
+    .AddApplicationLifecycleHealthCheck()
+    .AddCheck<StorageHealthCheck>("Storage")
+    .AddCheck<CacheHealthCheck>("Cache")
+    .AddCheck<DatabaseHealthCheck>("Database");
+```
+
+**Health Check Endpoint**:
+```bash
+curl http://localhost:3030/healthz
+```
+
+**Kubernetes Liveness Probe**:
+```yaml
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 3030
+  initialDelaySeconds: 30
+  periodSeconds: 10
+```
+
+Reference: `/src/GZCTF/Extensions/Startup/TelemetryExtension.cs:20-24`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customization" icon="palette" href="./customization">
+    Customize themes, branding, and localization
+  </Card>
+  <Card title="Container Providers" icon="server" href="./container-providers">
+    Configure Docker or Kubernetes orchestration
+  </Card>
+</CardGroup>

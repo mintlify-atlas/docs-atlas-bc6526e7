@@ -1,0 +1,184 @@
+---
+title: Introduction to GZCTF
+description: A modern, open-source CTF platform built with ASP.NET Core
+---
+
+# Welcome to GZCTF
+
+GZCTF (GZ::CTF) is a powerful, open-source Capture The Flag (CTF) competition platform built on ASP.NET Core. Designed for both beginners and experienced CTF organizers, GZCTF provides a comprehensive solution for hosting cybersecurity challenges and competitions.
+
+<Info>
+  GZCTF has been trusted by major universities and organizations worldwide, including UC San Diego, Tsinghua University, and Zhejiang University for their CTF competitions.
+</Info>
+
+## What is GZCTF?
+
+GZCTF is a modern CTF platform that enables organizers to create, manage, and host cybersecurity competitions with ease. It offers dynamic challenge management, real-time scoreboards, container orchestration, and comprehensive team management features.
+
+Whether you're organizing a university CTF, an international competition, or a training event, GZCTF provides the tools you need to deliver an exceptional experience.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Dynamic Challenges" icon="puzzle-piece">
+    Create highly customizable challenges with four types: Static/Dynamic Attachments and Static/Dynamic Containers. Support for automatic flag generation and unique flags per team.
+  </Card>
+  
+  <Card title="Container Orchestration" icon="docker">
+    Built-in support for Docker and Kubernetes with dynamic container distribution, multiple port mapping methods, and automatic lifecycle management.
+  </Card>
+  
+  <Card title="Real-time Monitoring" icon="chart-line">
+    Live scoreboards, competition timelines, event notifications, and flag submission monitoring powered by SignalR for instant updates.
+  </Card>
+  
+  <Card title="Dynamic Scoring" icon="calculator">
+    Advanced scoring system with customizable decay curves, difficulty coefficients, and bonus rewards for first three solves (5%, 3%, 1%).
+  </Card>
+  
+  <Card title="Team Management" icon="users">
+    Comprehensive team features including team creation, member management, division grouping, and optional team review processes.
+  </Card>
+  
+  <Card title="Traffic Capture" icon="network-wired">
+    Built-in TCP over WebSocket proxy for challenge traffic forwarding with configurable packet capture for challenge debugging.
+  </Card>
+  
+  <Card title="Multi-Storage Backend" icon="database">
+    Flexible storage options with support for local disk, MinIO, AWS S3, and other S3-compatible object storage services.
+  </Card>
+  
+  <Card title="Security & Verification" icon="shield-halved">
+    SMTP email verification, Cloudflare Turnstile CAPTCHA, malicious registration protection, and three-level user permission management.
+  </Card>
+</CardGroup>
+
+## Challenge Types
+
+GZCTF supports four distinct challenge types to accommodate various CTF scenarios:
+
+- **Static Attachment**: Shared attachments across all teams with any configured flag accepted
+- **Dynamic Attachment**: Unique attachments and flags distributed per team (requires at least as many flags as teams)
+- **Static Container**: Shared container templates without dynamic flags, accepting any configured flag
+- **Dynamic Container**: Automatically generates unique flags per team via container environment variables
+
+## Platform Capabilities
+
+<AccordionGroup>
+  <Accordion title="Competition Management">
+    - Create and manage multiple concurrent competitions
+    - Enable/disable challenges during live events
+    - Release new challenges at any time
+    - Configure team divisions and groupings
+    - Optional team review and invitation codes
+    - Registration email domain restrictions
+  </Accordion>
+  
+  <Accordion title="Monitoring & Analytics">
+    - Real-time scoreboard with team timelines
+    - Live submission and event monitoring
+    - Detailed competition logs and audit trails
+    - Cheat detection with flag sharing analysis
+    - Export scoreboard and submission records
+  </Accordion>
+  
+  <Accordion title="Writeup System">
+    - In-platform writeup submission
+    - Writeup review and approval workflow
+    - Batch download of all team writeups
+    - Post-competition knowledge sharing
+  </Accordion>
+  
+  <Accordion title="Customization">
+    - Custom platform title and branding
+    - Dark mode support
+    - Multiple language support (8+ languages)
+    - Custom themes and styling
+    - SEO-friendly HTML metadata
+    - Custom website footer and favicon
+  </Accordion>
+</AccordionGroup>
+
+## Technology Stack
+
+- **Backend**: ASP.NET Core 10.0 with Entity Framework Core
+- **Database**: PostgreSQL for data persistence
+- **Cache**: Redis for distributed caching and real-time features
+- **Containers**: Docker and Kubernetes support
+- **Real-time**: SignalR for live updates
+- **Storage**: Local filesystem or S3-compatible object storage
+
+## Internationalization
+
+GZCTF supports multiple languages with active community translations:
+
+**Fully Supported Languages:**
+- English (en-US) - Default
+- Simplified Chinese (zh-CN)
+- Traditional Chinese (zh-TW)
+- Japanese (ja-JP)
+- Indonesian (id-ID)
+- Korean (ko-KR)
+- Russian (ru-RU)
+- Vietnamese (vi-VN)
+
+**Machine Translated:**
+- German (de-DE)
+- French (fr-FR)
+- Spanish (es-ES)
+
+<Note>
+  Contributions to improve translations are welcome through the [Crowdin project](https://crowdin.com/project/gzctf).
+</Note>
+
+## Production Usage
+
+GZCTF has powered numerous successful CTF competitions:
+
+- **San Diego CTF 2024** - University of California, San Diego
+- **R3CTF 2024** - r3kapig
+- **TCP1P CTF 2024** - Exploring Nusantara's Digital Realm
+- **ZJUCTF 2022/2023/2024** - Zhejiang University
+- **SUSCTF 2022/2023/2024** - Southeast University
+- And many more university and international competitions
+
+<Warning>
+  GZCTF successfully handled 1.34 million requests in three minutes during stress testing at THUCTF 2022, validating its scalability for large-scale events.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get started with GZCTF in minutes - learn how to register, join teams, and participate in competitions.
+  </Card>
+  
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Deploy your own GZCTF instance with Docker or Kubernetes.
+  </Card>
+  
+  <Card title="Admin Guide" icon="user-shield" href="/admin/creating-games">
+    Learn how to configure and manage your GZCTF platform.
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the GZCTF REST API for custom integrations.
+  </Card>
+</CardGroup>
+
+## License
+
+GZCTF is dual-licensed under:
+- **AGPLv3** for core source code
+- **GZCTF Restricted License** for specific components
+
+See the [LICENSE](https://github.com/GZTimeWalker/GZCTF/blob/develop/LICENSE.txt) file for details.
+
+## Community
+
+Join the GZCTF community:
+
+- [GitHub Repository](https://github.com/GZTimeWalker/GZCTF)
+- [Telegram Group](https://telegram.dog/gzctf)
+- [Discord Server](https://discord.gg/dV9A6ZjVhC)
+- [QQ Group](https://jq.qq.com/?_wv=1027&k=muSqhF9x) (903244818)

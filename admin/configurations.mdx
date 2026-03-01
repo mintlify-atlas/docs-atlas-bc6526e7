@@ -1,0 +1,775 @@
+---
+title: Platform Configuration
+description: Global settings, SMTP, storage backends, and system configuration
+icon: gear
+---
+
+Configure GZCTF platform-wide settings including appearance, email, storage, containers, and security.
+
+## Configuration Overview
+
+GZCTF uses a hybrid configuration system:
+
+<CardGroup cols={2}>
+  <Card title="Database Config" icon="database">
+    Settings stored in database (editable via admin UI):
+    - Platform appearance
+    - Account policies
+    - Container policies
+  </Card>
+  
+  <Card title="File Config" icon="file">
+    Settings in `appsettings.json` (requires restart):
+    - Email/SMTP
+    - Storage backends
+    - Container provider
+    - Telemetry
+  </Card>
+</CardGroup>
+
+<Info>
+  Configuration changes via API/UI are applied immediately. Changes to `appsettings.json` require service restart.
+</Info>
+
+## Global Settings
+
+Access: **Admin Panel** → **Settings** → **Global Config**
+
+### Platform Branding
+
+<ParamField path="Title" type="string" default="GZ">
+  Platform name prefix (e.g., "GZ" → "GZ::CTF")
+</ParamField>
+
+<ParamField path="Slogan" type="string" default="Hack for fun not for profit">
+  Tagline displayed on homepage
+</ParamField>
+
+<ParamField path="Description" type="string" default="GZ::CTF is an open source CTF platform">
+  Meta description for SEO
+</ParamField>
+
+<ParamField path="FooterInfo" type="string">
+  Footer text (supports Markdown). Add links to social media, terms of service, etc.
+</ParamField>
+
+<CodeGroup>
+```json Example Configuration
+{
+  "GlobalConfig": {
+    "Title": "MyUniversity",
+    "Slogan": "Learn by Breaking",
+    "Description": "Official CTF platform of MyUniversity Security Lab",
+    "FooterInfo": "© 2024 MyUniversity | [Privacy Policy](/privacy)"
+  }
+}
+```
+</CodeGroup>
+
+### Logo and Favicon
+
+Customize platform visuals:
+
+<Steps>
+  <Step title="Upload Logo">
+    Click **Update Logo** in settings
+  </Step>
+  
+  <Step title="Image Requirements">
+    - Maximum size: 3 MB
+    - Recommended: PNG with transparency
+    - Logo scaled to 640px width
+    - Favicon scaled to 256×256px
+  </Step>
+  
+  <Step title="Apply Changes">
+    Logo and favicon update immediately
+  </Step>
+</Steps>
+
+<CodeGroup>
+```bash Upload Logo (API)
+curl -X POST https://your-gzctf.com/api/admin/config/logo \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@logo.png"
+```
+
+```bash Reset to Default
+curl -X DELETE https://your-gzctf.com/api/admin/config/logo \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</CodeGroup>
+
+### Theme Customization
+
+<ParamField path="CustomTheme" type="string">
+  CSS hex color for primary theme color (e.g., `#3B82F6` for blue)
+</ParamField>
+
+<Tip>
+  Use your organization's brand color for consistent visual identity.
+</Tip>
+
+## Account Policy
+
+Control user registration and authentication.
+
+<ParamField path="AllowRegister" type="boolean" default={true}>
+  Enable public user registration
+</ParamField>
+
+<ParamField path="ActiveOnRegister" type="boolean" default={true}>
+  Automatically activate accounts after registration (no email verification)
+</ParamField>
+
+<ParamField path="EmailConfirmationRequired" type="boolean" default={false}>
+  Require email verification for:
+  - New registrations
+  - Email address changes
+  - Password resets
+</ParamField>
+
+<ParamField path="UseCaptcha" type="boolean" default={false}>
+  Enable CAPTCHA on registration and login forms
+</ParamField>
+
+<ParamField path="EmailDomainList" type="string">
+  Comma-separated list of allowed email domains. Empty = allow all.
+  
+  Example: `university.edu,student.edu`
+</ParamField>
+
+<CodeGroup>
+```json Example: Restricted University
+{
+  "AccountPolicy": {
+    "AllowRegister": true,
+    "ActiveOnRegister": false,
+    "EmailConfirmationRequired": true,
+    "UseCaptcha": true,
+    "EmailDomainList": "university.edu"
+  }
+}
+```
+
+```json Example: Open Platform
+{
+  "AccountPolicy": {
+    "AllowRegister": true,
+    "ActiveOnRegister": true,
+    "EmailConfirmationRequired": false,
+    "UseCaptcha": false,
+    "EmailDomainList": ""
+  }
+}
+```
+</CodeGroup>
+
+<Warning>
+  If `AllowRegister: false`, users can only be created by admins via batch import.
+</Warning>
+
+## Container Policy
+
+Manage container resource allocation.
+
+<ParamField path="AutoDestroyOnLimitReached" type="boolean" default={false}>
+  Automatically destroy oldest container when team reaches limit
+</ParamField>
+
+<ParamField path="MaxExerciseContainerCountPerUser" type="integer" default={1}>
+  Maximum exercise (non-game) containers per user
+</ParamField>
+
+<ParamField path="DefaultLifetime" type="integer" default={120}>
+  Default container lifetime in minutes (range: 1-7200)
+</ParamField>
+
+<ParamField path="ExtensionDuration" type="integer" default={120}>
+  Additional minutes added when container is extended (range: 1-7200)
+</ParamField>
+
+<ParamField path="RenewalWindow" type="integer" default={10}>
+  Minutes before expiry when extension is allowed (range: 1-360)
+</ParamField>
+
+<CodeGroup>
+```json Example: Short-Lived Containers
+{
+  "ContainerPolicy": {
+    "DefaultLifetime": 30,
+    "ExtensionDuration": 15,
+    "RenewalWindow": 5
+  }
+}
+// Containers: 30min initial, +15min extensions, renew in last 5min
+```
+
+```json Example: Long-Running
+{
+  "ContainerPolicy": {
+    "DefaultLifetime": 240,
+    "ExtensionDuration": 240,
+    "RenewalWindow": 30
+  }
+}
+// Containers: 4h initial, +4h extensions, renew in last 30min
+```
+</CodeGroup>
+
+## Email Configuration
+
+Configure SMTP for email notifications.
+
+<Info>
+  Email settings are in `appsettings.json` and require service restart.
+</Info>
+
+### SMTP Setup
+
+Edit `appsettings.json`:
+
+<CodeGroup>
+```json Gmail Example
+{
+  "EmailConfig": {
+    "UserName": "noreply@example.com",
+    "Password": "your-app-password",
+    "SenderAddress": "noreply@example.com",
+    "SenderName": "GZCTF Platform",
+    "Smtp": {
+      "Host": "smtp.gmail.com",
+      "Port": 587,
+      "BypassCertVerify": false
+    }
+  }
+}
+```
+
+```json Office 365 Example
+{
+  "EmailConfig": {
+    "UserName": "noreply@example.com",
+    "Password": "your-password",
+    "SenderAddress": "noreply@example.com",
+    "SenderName": "My CTF Platform",
+    "Smtp": {
+      "Host": "smtp.office365.com",
+      "Port": 587,
+      "BypassCertVerify": false
+    }
+  }
+}
+```
+
+```json Custom SMTP
+{
+  "EmailConfig": {
+    "UserName": "mail@yourdomain.com",
+    "Password": "smtp-password",
+    "SenderAddress": "noreply@yourdomain.com",
+    "SenderName": "YourCTF",
+    "Smtp": {
+      "Host": "smtp.yourdomain.com",
+      "Port": 465,
+      "BypassCertVerify": false
+    }
+  }
+}
+```
+</CodeGroup>
+
+<ParamField path="BypassCertVerify" type="boolean" default={false}>
+  Skip SSL certificate validation (use only for testing with self-signed certs)
+</ParamField>
+
+<Warning>
+  Never commit passwords to version control. Use environment variables:
+  
+  ```bash
+  export EmailConfig__Password="your-password"
+  ```
+</Warning>
+
+## Storage Configuration
+
+GZCTF supports multiple storage backends for files and attachments.
+
+### Local Storage (Default)
+
+Store files on server filesystem:
+
+<CodeGroup>
+```json Local Storage
+{
+  "StorageConfig": {
+    "Type": "LocalStorage",
+    "LocalStorage": {
+      "Path": "/app/files"
+    }
+  }
+}
+```
+</CodeGroup>
+
+<Info>
+  Local storage path must be writable by the GZCTF process. Use Docker volume for persistence.
+</Info>
+
+### Object Storage (S3-Compatible)
+
+Use S3, MinIO, or compatible services:
+
+<CodeGroup>
+```json AWS S3
+{
+  "StorageConfig": {
+    "Type": "S3Storage",
+    "S3Storage": {
+      "Endpoint": "s3.amazonaws.com",
+      "Bucket": "gzctf-files",
+      "Region": "us-east-1",
+      "AccessKey": "YOUR_ACCESS_KEY",
+      "SecretKey": "YOUR_SECRET_KEY"
+    }
+  }
+}
+```
+
+```json MinIO
+{
+  "StorageConfig": {
+    "Type": "S3Storage",
+    "S3Storage": {
+      "Endpoint": "minio.yourdomain.com:9000",
+      "Bucket": "gzctf",
+      "Region": "us-east-1",
+      "AccessKey": "minioadmin",
+      "SecretKey": "minioadmin",
+      "UseSSL": false
+    }
+  }
+}
+```
+</CodeGroup>
+
+<Tip>
+  Object storage is recommended for production deployments with multiple replicas.
+</Tip>
+
+## Container Provider
+
+Configure Docker or Kubernetes for challenge containers.
+
+### Docker Provider
+
+<CodeGroup>
+```json Docker Socket (Local)
+{
+  "ContainerProvider": {
+    "Type": "Docker",
+    "PortMappingType": "Default",
+    "PublicEntry": "your-domain.com",
+    "EnableTrafficCapture": false,
+    "DockerConfig": {
+      "Uri": "unix:///var/run/docker.sock"
+    }
+  }
+}
+```
+
+```json Docker TCP (Remote)
+{
+  "ContainerProvider": {
+    "Type": "Docker",
+    "PortMappingType": "Default",
+    "PublicEntry": "your-domain.com",
+    "DockerConfig": {
+      "Uri": "tcp://docker-host:2376",
+      "UserName": "user",
+      "Password": "password"
+    }
+  }
+}
+```
+</CodeGroup>
+
+<ParamField path="PublicEntry" type="string" required>
+  Public hostname/IP where containers are accessible
+</ParamField>
+
+<ParamField path="PortMappingType" type="enum" default="Default">
+  - `Default`: Map to host ports (requires open port range)
+  - `PlatformProxy`: Proxy via WebSocket (no open ports needed)
+</ParamField>
+
+### Kubernetes Provider
+
+<CodeGroup>
+```json Kubernetes Config
+{
+  "ContainerProvider": {
+    "Type": "Kubernetes",
+    "PortMappingType": "Default",
+    "PublicEntry": "k8s-cluster.com",
+    "EnableTrafficCapture": true,
+    "KubernetesConfig": {
+      "Namespace": "gzctf-challenges",
+      "KubeConfig": "/app/kube-config.yaml",
+      "AllowCidr": [
+        "10.0.0.0/8",
+        "172.16.0.0/12"
+      ],
+      "Dns": [
+        "8.8.8.8",
+        "8.8.4.4"
+      ]
+    }
+  }
+}
+```
+</CodeGroup>
+
+<ParamField path="AllowCidr" type="array[string]">
+  Network policies for container egress
+</ParamField>
+
+<ParamField path="Dns" type="array[string]">
+  Custom DNS servers for containers
+</ParamField>
+
+<Warning>
+  Kubernetes mode requires:
+  - Valid kubeconfig file
+  - Proper RBAC permissions
+  - Network policies configured
+</Warning>
+
+## Container Registry
+
+Configure authentication for private registries:
+
+<CodeGroup>
+```json Private Registry
+{
+  "Registry": {
+    "docker.io": {
+      "ServerAddress": "https://index.docker.io/v1/",
+      "UserName": "your-username",
+      "Password": "your-password"
+    },
+    "ghcr.io": {
+      "ServerAddress": "https://ghcr.io",
+      "UserName": "github-username",
+      "Password": "github-token"
+    }
+  }
+}
+```
+</CodeGroup>
+
+<Info>
+  Registry credentials are used to pull private container images for challenges.
+</Info>
+
+## Captcha Configuration
+
+Protect against bots with CAPTCHA.
+
+### Cloudflare Turnstile
+
+<CodeGroup>
+```json Turnstile Config
+{
+  "CaptchaConfig": {
+    "Provider": "CloudflareTurnstile",
+    "SiteKey": "your-site-key",
+    "SecretKey": "your-secret-key"
+  }
+}
+```
+</CodeGroup>
+
+<Steps>
+  <Step title="Get Turnstile Keys">
+    Visit [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/) to create site
+  </Step>
+  
+  <Step title="Configure Keys">
+    Add site key and secret key to config
+  </Step>
+  
+  <Step title="Enable in Account Policy">
+    Set `UseCaptcha: true` in admin settings
+  </Step>
+</Steps>
+
+### Hash Proof-of-Work
+
+Alternative CAPTCHA using client-side computation:
+
+<CodeGroup>
+```json HashPow Config
+{
+  "CaptchaConfig": {
+    "Provider": "HashPow",
+    "HashPow": {
+      "Difficulty": 18
+    }
+  }
+}
+```
+</CodeGroup>
+
+<ParamField path="Difficulty" type="integer" default={18}>
+  Number of leading zero bits (range: 8-48). Higher = harder to solve.
+</ParamField>
+
+<Tip>
+  HashPow doesn't require external services but may slow down registration on slow clients.
+</Tip>
+
+## Security Settings
+
+### API Encryption
+
+<ParamField path="ApiEncryption" type="boolean" default={false}>
+  Enable asymmetric encryption for sensitive API requests (flag submissions)
+</ParamField>
+
+<Info>
+  When enabled, client encrypts requests with server's public key. Prevents flag interception via network sniffing.
+</Info>
+
+<Steps>
+  <Step title="Enable Encryption">
+    Toggle `ApiEncryption` to `true` in Global Config
+  </Step>
+  
+  <Step title="Key Generation">
+    System automatically generates X25519 key pair
+  </Step>
+  
+  <Step title="Client Configuration">
+    Frontend automatically fetches public key from `/api/config`
+  </Step>
+</Steps>
+
+## Telemetry and Monitoring
+
+Configure observability for production monitoring.
+
+### Prometheus Metrics
+
+<CodeGroup>
+```json Prometheus Config
+{
+  "Telemetry": {
+    "Prometheus": {
+      "Enable": true,
+      "TotalNameSuffixForCounters": true
+    }
+  }
+}
+```
+</CodeGroup>
+
+Metrics endpoint: `/metrics`
+
+### OpenTelemetry
+
+<CodeGroup>
+```json OTLP Config
+{
+  "Telemetry": {
+    "OpenTelemetry": {
+      "Enable": true,
+      "Protocol": "Grpc",
+      "EndpointUri": "http://otel-collector:4317"
+    }
+  }
+}
+```
+</CodeGroup>
+
+### Grafana Loki Logging
+
+<CodeGroup>
+```json Loki Config
+{
+  "GrafanaLoki": {
+    "Enable": true,
+    "EndpointUri": "http://loki:3100",
+    "Labels": [
+      { "Key": "app", "Value": "gzctf" }
+    ],
+    "PropertiesAsLabels": ["Environment"],
+    "MinimumLevel": "Information"
+  }
+}
+```
+</CodeGroup>
+
+<Tip>
+  Combine Prometheus + Loki + Grafana for complete observability stack.
+</Tip>
+
+## Forwarded Headers
+
+Configure when behind reverse proxy:
+
+<CodeGroup>
+```json Nginx/Traefik Proxy
+{
+  "ForwardedOptions": {
+    "ForwardedHeaders": 5,  // X-Forwarded-For + X-Forwarded-Proto
+    "ForwardLimit": 1,
+    "KnownProxies": [
+      "nginx-proxy-ip"
+    ],
+    "KnownNetworks": [
+      "10.0.0.0/8"
+    ]
+  }
+}
+```
+</CodeGroup>
+
+<Warning>
+  Incorrect forwarded headers configuration can break:
+  - Rate limiting
+  - IP-based access control
+  - Audit logs
+</Warning>
+
+## Configuration API
+
+Manage settings programmatically:
+
+<AccordionGroup>
+  <Accordion title="GET /api/admin/config" icon="eye">
+    Retrieve current configuration:
+    ```json
+    {
+      "accountPolicy": {...},
+      "globalConfig": {...},
+      "containerPolicy": {...}
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="PUT /api/admin/config" icon="pen">
+    Update configuration:
+    ```javascript
+    PUT /api/admin/config
+    
+    {
+      "globalConfig": {
+        "title": "NewTitle",
+        "slogan": "New Slogan"
+      }
+    }
+    ```
+    
+    Changes apply immediately (no restart needed).
+  </Accordion>
+</AccordionGroup>
+
+## Environment Variables
+
+Override config with environment variables:
+
+<CodeGroup>
+```bash Environment Override
+# Database connection
+export ConnectionStrings__Database="Host=postgres;Database=gzctf"
+
+# Email password
+export EmailConfig__Password="smtp-password"
+
+# Storage
+export StorageConfig__Type="S3Storage"
+export StorageConfig__S3Storage__AccessKey="key"
+
+# Any config can be overridden
+export GlobalConfig__Title="MyPlatform"
+```
+</CodeGroup>
+
+<Info>
+  Use double underscores (`__`) to represent nested JSON structure.
+</Info>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Secure Secrets" icon="lock">
+    - Use environment variables for passwords
+    - Never commit credentials to git
+    - Rotate secrets regularly
+  </Card>
+  
+  <Card title="Test Changes" icon="flask">
+    - Test SMTP before enabling email verification
+    - Verify storage backend is accessible
+    - Check container provider connectivity
+  </Card>
+  
+  <Card title="Monitor Resources" icon="chart-line">
+    - Enable telemetry in production
+    - Set up alerts for errors
+    - Track container resource usage
+  </Card>
+  
+  <Card title="Backup Configuration" icon="floppy-disk">
+    - Export database config regularly
+    - Keep appsettings.json in version control (without secrets)
+    - Document custom changes
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Configuration changes not applying">
+    - Database changes: Apply immediately (verify in UI)
+    - File changes: Require service restart
+    - Clear browser cache after logo/theme changes
+  </Accordion>
+  
+  <Accordion title="Email not sending">
+    Check:
+    - SMTP credentials are correct
+    - Port is not blocked by firewall
+    - `EmailConfirmationRequired` matches SMTP config
+    - Test with telnet: `telnet smtp.host.com 587`
+  </Accordion>
+  
+  <Accordion title="Containers not starting">
+    Verify:
+    - Container provider is running
+    - Network is accessible
+    - Registry credentials (if private images)
+    - Resource limits are reasonable
+  </Accordion>
+  
+  <Accordion title="Storage errors">
+    Confirm:
+    - Storage path/bucket exists
+    - Credentials are valid
+    - Network connectivity to storage backend
+    - Sufficient permissions
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Games" icon="trophy" href="/admin/creating-games">
+    Start creating your first CTF
+  </Card>
+  
+  <Card title="Monitoring" icon="chart-line" href="/admin/monitoring">
+    Set up competition monitoring
+  </Card>
+</CardGroup>

@@ -1,0 +1,612 @@
+---
+title: Kubernetes Deployment
+description: Deploy GZCTF on Kubernetes with dynamic challenge support
+---
+
+GZCTF supports Kubernetes as a container provider for dynamic CTF challenges. This guide covers deploying GZCTF on Kubernetes and configuring it to manage challenge containers.
+
+## Prerequisites
+
+- Kubernetes cluster 1.24 or later (K3s, EKS, GKE, AKS, or self-managed)
+- `kubectl` configured to access your cluster
+- PostgreSQL database (can be deployed in-cluster or external)
+- (Optional) Redis for distributed caching
+- (Optional) Helm 3 for simplified deployment
+
+## Architecture Overview
+
+When using Kubernetes as the container provider:
+
+- GZCTF runs as a Deployment in your cluster
+- Challenge containers are deployed as Pods in a dedicated namespace (default: `gzctf-challenges`)
+- Network policies control challenge container access
+- Kubernetes ServiceAccounts provide RBAC for container management
+
+## Kubernetes Manifests
+
+<Steps>
+
+### Create Namespace
+
+First, create a namespace for GZCTF:
+
+```yaml namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gzctf
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gzctf-challenges
+```
+
+Apply the manifest:
+
+```bash
+kubectl apply -f namespace.yaml
+```
+
+### Configure RBAC
+
+Create a ServiceAccount and RBAC permissions for GZCTF to manage challenge containers:
+
+```yaml rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gzctf
+  namespace: gzctf
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gzctf-container-manager
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gzctf-container-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gzctf-container-manager
+subjects:
+  - kind: ServiceAccount
+    name: gzctf
+    namespace: gzctf
+```
+
+Apply RBAC configuration:
+
+```bash
+kubectl apply -f rbac.yaml
+```
+
+### Create ConfigMap
+
+Create a ConfigMap for environment configuration:
+
+```yaml configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gzctf-config
+  namespace: gzctf
+data:
+  GZCTF_ContainerProvider__Type: "Kubernetes"
+  GZCTF_ContainerProvider__PortMappingType: "Default"
+  GZCTF_ContainerProvider__KubernetesConfig__Namespace: "gzctf-challenges"
+  GZCTF_ContainerProvider__KubernetesConfig__KubeConfig: "incluster"
+  # Add DNS servers if needed
+  # GZCTF_ContainerProvider__KubernetesConfig__Dns__0: "8.8.8.8"
+  # GZCTF_ContainerProvider__KubernetesConfig__Dns__1: "8.8.4.4"
+```
+
+```bash
+kubectl apply -f configmap.yaml
+```
+
+### Create Secret
+
+Store sensitive configuration in a Kubernetes Secret:
+
+```yaml secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gzctf-secret
+  namespace: gzctf
+type: Opaque
+stringData:
+  database-connection: "Host=postgres;Port=5432;Database=gzctf;Username=gzctf;Password=<your-password>"
+  # Optional: Redis connection
+  redis-connection: "redis:6379"
+  # Optional: Storage connection (S3)
+  storage-connection: "aws.s3://bucket=gzctf&region=us-east-1&accessKey=<key>&secretKey=<secret>"
+```
+
+<Warning>
+Replace `<your-password>`, `<key>`, and `<secret>` with actual values. Never commit secrets to version control!
+</Warning>
+
+```bash
+kubectl apply -f secret.yaml
+```
+
+### Deploy PostgreSQL (Optional)
+
+If you don't have an external database, deploy PostgreSQL in-cluster:
+
+```yaml postgres.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: gzctf
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: gzctf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: gzctf
+            - name: POSTGRES_USER
+              value: gzctf
+            - name: POSTGRES_PASSWORD
+              value: <your-password>
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: gzctf
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+```
+
+```bash
+kubectl apply -f postgres.yaml
+```
+
+### Deploy GZCTF
+
+Create the main GZCTF deployment:
+
+```yaml deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gzctf
+  namespace: gzctf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gzctf
+  template:
+    metadata:
+      labels:
+        app: gzctf
+    spec:
+      serviceAccountName: gzctf
+      containers:
+        - name: gzctf
+          image: gztime/gzctf:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 3000
+          env:
+            - name: GZCTF_ConnectionStrings__Database
+              valueFrom:
+                secretKeyRef:
+                  name: gzctf-secret
+                  key: database-connection
+            - name: GZCTF_ConnectionStrings__RedisCache
+              valueFrom:
+                secretKeyRef:
+                  name: gzctf-secret
+                  key: redis-connection
+                  optional: true
+            - name: GZCTF_ConnectionStrings__Storage
+              valueFrom:
+                secretKeyRef:
+                  name: gzctf-secret
+                  key: storage-connection
+                  optional: true
+          envFrom:
+            - configMapRef:
+                name: gzctf-config
+          volumeMounts:
+            - name: files
+              mountPath: /app/files
+            - name: logs
+              mountPath: /app/logs
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+      volumes:
+        - name: files
+          persistentVolumeClaim:
+            claimName: gzctf-files-pvc
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gzctf-files-pvc
+  namespace: gzctf
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gzctf
+  namespace: gzctf
+spec:
+  selector:
+    app: gzctf
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: metrics
+      port: 3000
+      targetPort: 3000
+  type: ClusterIP
+```
+
+```bash
+kubectl apply -f deployment.yaml
+```
+
+### Expose via Ingress
+
+Create an Ingress to expose GZCTF:
+
+<CodeGroup>
+
+```yaml ingress-nginx.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gzctf
+  namespace: gzctf
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ctf.example.com
+      secretName: gzctf-tls
+  rules:
+    - host: ctf.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gzctf
+                port:
+                  number: 8080
+```
+
+```yaml ingress-traefik.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gzctf
+  namespace: gzctf
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - ctf.example.com
+      secretName: gzctf-tls
+  rules:
+    - host: ctf.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gzctf
+                port:
+                  number: 8080
+```
+
+</CodeGroup>
+
+```bash
+kubectl apply -f ingress-nginx.yaml
+```
+
+</Steps>
+
+## Kubernetes Configuration
+
+The `KubernetesClient` package is used for container management (see GZCTF.csproj:39). Configuration options:
+
+### In-Cluster Configuration
+
+When running inside Kubernetes (recommended):
+
+```yaml
+GZCTF_ContainerProvider__KubernetesConfig__KubeConfig: "incluster"
+```
+
+This uses the ServiceAccount token automatically mounted at `/var/run/secrets/kubernetes.io/serviceaccount/token`.
+
+### External kubeconfig
+
+For external cluster management (not recommended for production):
+
+1. Create a ConfigMap with your kubeconfig:
+
+```bash
+kubectl create configmap kube-config --from-file=kube-config.yaml=/path/to/kubeconfig -n gzctf
+```
+
+2. Mount it in the deployment:
+
+```yaml
+volumeMounts:
+  - name: kube-config
+    mountPath: /app/kube-config.yaml
+    subPath: kube-config.yaml
+volumes:
+  - name: kube-config
+    configMap:
+      name: kube-config
+```
+
+3. Set the path:
+
+```yaml
+GZCTF_ContainerProvider__KubernetesConfig__KubeConfig: "kube-config.yaml"
+```
+
+### Network Configuration
+
+#### CIDR Restrictions
+
+Restrict challenge container network access:
+
+```yaml
+GZCTF_ContainerProvider__KubernetesConfig__AllowCidr__0: "10.0.0.0/8"
+GZCTF_ContainerProvider__KubernetesConfig__AllowCidr__1: "172.16.0.0/12"
+```
+
+#### Custom DNS
+
+Override DNS servers for challenge containers:
+
+```yaml
+GZCTF_ContainerProvider__KubernetesConfig__Dns__0: "8.8.8.8"
+GZCTF_ContainerProvider__KubernetesConfig__Dns__1: "1.1.1.1"
+```
+
+## Storage Options
+
+### Using S3-Compatible Storage
+
+For Kubernetes deployments, S3-compatible storage (like MinIO) is recommended:
+
+```yaml
+GZCTF_ConnectionStrings__Storage: "minio.s3://bucket=gzctf&endpoint=http://minio.minio:9000&region=us-east-1&accessKey=<key>&secretKey=<secret>&forcePathStyle=true"
+```
+
+### Using Persistent Volumes
+
+For local file storage, ensure PVC supports ReadWriteMany if running multiple replicas:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gzctf-files-pvc
+spec:
+  accessModes:
+    - ReadWriteMany  # Required for multiple replicas
+  storageClassName: nfs-client  # Or other RWX storage class
+  resources:
+    requests:
+      storage: 50Gi
+```
+
+## Monitoring and Observability
+
+### Prometheus Metrics
+
+GZCTF exposes Prometheus metrics on port 3000:
+
+```yaml servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gzctf
+  namespace: gzctf
+spec:
+  selector:
+    matchLabels:
+      app: gzctf
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+```
+
+### Health Checks
+
+The `/healthz` endpoint on port 3000 provides health status:
+
+```bash
+kubectl port-forward -n gzctf svc/gzctf 3000:3000
+curl http://localhost:3000/healthz
+```
+
+## Scaling Considerations
+
+### Horizontal Pod Autoscaling
+
+<Warning>
+Before enabling HPA with multiple replicas, ensure you have:
+- Redis configured for distributed caching and SignalR backplane
+- ReadWriteMany storage or S3 backend
+- Database connection pooling configured
+</Warning>
+
+```yaml hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gzctf
+  namespace: gzctf
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gzctf
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+```
+
+## Troubleshooting
+
+### Check GZCTF Logs
+
+```bash
+kubectl logs -n gzctf -l app=gzctf -f
+```
+
+### Verify RBAC Permissions
+
+```bash
+kubectl auth can-i create pods --as=system:serviceaccount:gzctf:gzctf -n gzctf-challenges
+```
+
+### Debug Challenge Containers
+
+List challenge pods:
+
+```bash
+kubectl get pods -n gzctf-challenges
+```
+
+Check challenge pod logs:
+
+```bash
+kubectl logs -n gzctf-challenges <pod-name>
+```
+
+### Common Issues
+
+**Challenge containers won't start:**
+- Verify RBAC permissions are correctly configured
+- Check that the `gzctf-challenges` namespace exists
+- Ensure the ServiceAccount is bound correctly
+
+**Network connectivity issues:**
+- Verify NetworkPolicies aren't blocking required traffic
+- Check DNS configuration
+- Ensure ingress controller is properly configured
+
+## Next Steps
+
+- [Configuration Reference](/deployment/configuration) - Detailed configuration options
+- [Security Considerations](/deployment/security) - Security best practices
+- [Docker Deployment](/deployment/docker) - Alternative deployment method

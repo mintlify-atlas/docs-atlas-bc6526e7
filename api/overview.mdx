@@ -1,0 +1,160 @@
+---
+title: 'API Overview'
+description: 'Introduction to GZCTF REST API architecture and conventions'
+icon: 'code'
+---
+
+## Introduction
+
+GZCTF provides a comprehensive REST API for interacting with the platform programmatically. The API allows you to manage games, challenges, teams, users, and more.
+
+## Base URL
+
+The API is accessible at:
+
+```
+https://your-instance.com/api
+```
+
+All API endpoints are relative to this base URL.
+
+## API Versioning
+
+The current API version is embedded in the endpoint paths. GZCTF follows a controller-based routing structure:
+
+- `/api/account/*` - Account management
+- `/api/game/*` - Game operations
+- `/api/team/*` - Team management
+- `/api/admin/*` - Administrative functions
+- `/api/edit/*` - Content editing (admin)
+- `/api/tokens/*` - API token management
+
+## Request Format
+
+All requests should use:
+
+- **Content-Type**: `application/json`
+- **Method**: Standard HTTP methods (GET, POST, PUT, DELETE)
+- **Body**: JSON-formatted data for POST/PUT requests
+
+### Example Request
+
+```bash
+curl -X POST https://your-instance.com/api/account/login \
+  -H "Content-Type: application/json" \
+  -d '{"userName":"user","password":"encrypted_password"}'
+```
+
+## Response Format
+
+All API responses use JSON format with consistent structures:
+
+### Success Response
+
+```json
+{
+  "title": "Success message",
+  "status": 200,
+  "data": {}
+}
+```
+
+### Error Response
+
+```json
+{
+  "title": "Error message",
+  "status": 400,
+  "detail": "Additional error details"
+}
+```
+
+### Common Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Success |
+| 201 | Created |
+| 204 | No Content |
+| 304 | Not Modified (cached) |
+| 400 | Bad Request |
+| 401 | Unauthorized |
+| 403 | Forbidden |
+| 404 | Not Found |
+| 409 | Conflict |
+| 500 | Internal Server Error |
+
+## Response Headers
+
+GZCTF uses standard HTTP headers for caching and content negotiation:
+
+- `ETag` - Entity tag for cache validation
+- `Last-Modified` - Last modification time
+- `Content-Type` - Always `application/json` unless downloading files
+
+## Rate Limiting
+
+Certain endpoints are rate-limited to prevent abuse:
+
+- **Registration**: Limited by `RateLimiter.LimitPolicy.Register`
+- **Login**: Limited by `RateLimiter.LimitPolicy.Register`
+- **Submissions**: Limited by `RateLimiter.LimitPolicy.Submit`
+- **Queries**: Limited by `RateLimiter.LimitPolicy.Query`
+
+When rate limited, you'll receive a `429 Too Many Requests` response.
+
+## Pagination
+
+List endpoints support pagination using query parameters:
+
+<ParamField query="count" type="integer" default="10">
+  Number of items to return (max varies by endpoint)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Number of items to skip
+</ParamField>
+
+### Paginated Response
+
+```json
+{
+  "data": [...],
+  "total": 150,
+  "count": 10,
+  "skip": 0
+}
+```
+
+## Caching
+
+Many endpoints support HTTP caching with `ETag` and `Last-Modified` headers. Include these headers in subsequent requests for efficient data retrieval:
+
+```bash
+curl -H "If-None-Match: \"abc123\"" \
+     -H "If-Modified-Since: Mon, 01 Mar 2026 12:00:00 GMT" \
+     https://your-instance.com/api/game/recent
+```
+
+A `304 Not Modified` response indicates cached data is still valid.
+
+## Data Encryption
+
+Sensitive data like passwords may require client-side encryption before transmission when the `ApiEncryption` feature is enabled. Check the platform configuration for encryption requirements.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Learn about authentication methods
+  </Card>
+  <Card title="Game API" icon="gamepad" href="/api/game">
+    Explore game management endpoints
+  </Card>
+  <Card title="Team API" icon="users" href="/api/team">
+    Team operations and management
+  </Card>
+  <Card title="Account API" icon="user" href="/api/account">
+    User account management
+  </Card>
+</CardGroup>

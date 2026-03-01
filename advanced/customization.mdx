@@ -1,0 +1,661 @@
+---
+title: Platform Customization
+description: Themes, branding, localization, and UI customization in GZCTF
+---
+
+GZCTF provides extensive customization options to brand your CTF platform. You can customize themes, logos, localization, footer content, and more through configuration and the admin panel.
+
+## Branding Configuration
+
+### Platform Identity
+
+Customize your platform's identity via `appsettings.json` or the admin settings page:
+
+```json
+{
+  "GlobalConfig": {
+    "Title": "GZ",
+    "Slogan": "Hack for fun not for profit",
+    "Description": "GZ::CTF is an open source CTF platform",
+    "FooterInfo": "Powered by GZCTF | © 2024 Your Organization"
+  }
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Title" icon="heading">
+    Platform prefix name. Displayed as `{Title}::CTF` throughout the UI.
+    
+    Default: `"GZ"` → `"GZ::CTF"`
+  </Card>
+  
+  <Card title="Slogan" icon="quote-left">
+    Tagline displayed on homepage and landing pages.
+    
+    Default: `"Hack for fun not for profit"`
+  </Card>
+  
+  <Card title="Description" icon="file-lines">
+    Site description for SEO meta tags.
+    
+    Used in `<meta name="description">`
+  </Card>
+  
+  <Card title="Footer Info" icon="shoe-prints">
+    Custom footer content (supports HTML).
+    
+    Rendered at the bottom of every page.
+  </Card>
+</CardGroup>
+
+Reference: `/src/GZCTF/Models/Internal/Configs.cs:228-292`
+
+### Logo and Favicon
+
+<Steps>
+  <Step title="Upload Assets via Admin Panel">
+    Navigate to **Admin** → **Settings** → **Platform**
+    
+    - **Logo**: Displayed in header (recommended: SVG or PNG, max 200px height)
+    - **Favicon**: Browser tab icon (recommended: ICO, PNG, or WebP, 32x32 or 64x64)
+  </Step>
+  
+  <Step title="Assets are Hashed">
+    Uploaded files are stored with content-based hashes:
+    
+    ```
+    /assets/{sha256_hash}/logo
+    /assets/{sha256_hash}/favicon
+    ```
+    
+    This enables aggressive caching and CDN optimization.
+  </Step>
+  
+  <Step title="Default Favicon">
+    If no favicon is uploaded, GZCTF uses the embedded default:
+    
+    ```csharp
+    internal static byte[] DefaultFavicon { get; }
+    internal static string DefaultFaviconHash { get; }
+    ```
+    
+    Located at: `/src/GZCTF/Resources/favicon.webp`
+    
+    Reference: `/src/GZCTF/Program.cs:62-74`
+  </Step>
+</Steps>
+
+## Theme Customization
+
+### Default Theme
+
+GZCTF includes a custom Mantine-based theme with carefully chosen color palettes:
+
+```typescript Default Color Palette
+const CustomTheme = {
+  colors: {
+    brand: [      // Primary accent color (teal/cyan)
+      '#E1FFF9',  // Lightest
+      '#CFFCF1',
+      '#A2F7E2',
+      '#72F1D2',
+      '#4BEDC4',
+      '#2AE5B5',
+      '#18CB9E',
+      '#00AA85',
+      '#007F6E',
+      '#005A4C'   // Darkest
+    ],
+    gray: [       // Neutral grays
+      '#EBEBEB',
+      '#CFCFCF',
+      '#B3B3B3',
+      '#969696',
+      '#7A7A7A',
+      '#5E5E5E',
+      '#414141',
+      '#252525',
+      '#202020',
+      '#141414'
+    ],
+    alert: [      // Error/warning states
+      '#FFB4B4',
+      '#FFA0A0',
+      '#FF8c8c',
+      '#FF7878',
+      '#FF6464',
+      '#FE5050',
+      '#FE3c3c',
+      '#FE2828',
+      '#FC1414',
+      '#FC0000'
+    ]
+  },
+  primaryColor: 'brand',
+  fontFamily: 'Lexend, -apple-system, BlinkMacSystemFont, ...',
+  fontFamilyMonospace: 'JetBrains Mono, ui-monospace, ...'
+}
+```
+
+Reference: `/src/GZCTF/ClientApp/src/utils/ThemeOverride.ts:25-93`
+
+### Custom Theme Colors
+
+Admins can override the primary color via the settings panel:
+
+<Steps>
+  <Step title="Set Custom Theme in Admin Panel">
+    **Admin** → **Settings** → **Platform** → **Custom Theme**
+    
+    Enter a hex color: `#FF6B6B`
+  </Step>
+  
+  <Step title="Color Generation">
+    GZCTF automatically generates a 10-shade palette:
+    
+    ```typescript
+    import { generateColors } from '@mantine/colors-generator'
+    
+    const customPalette = generateColors('#FF6B6B')
+    // Returns: ['#ffe1e1', '#ffcfcf', ..., '#8c0000']
+    ```
+    
+    Reference: `/src/GZCTF/ClientApp/src/utils/ThemeOverride.ts:264`
+  </Step>
+  
+  <Step title="Theme Application">
+    The custom color becomes the new primary:
+    
+    ```typescript
+    {
+      ...CustomTheme,
+      colors: {
+        ...CustomTheme.colors,
+        custom: generateColors(resolvedColor)
+      },
+      primaryColor: 'custom'
+    }
+    ```
+    
+    Reference: `/src/GZCTF/ClientApp/src/utils/ThemeOverride.ts:260-275`
+  </Step>
+</Steps>
+
+### User Theme Preferences
+
+Players can override theme colors locally:
+
+```typescript Color Provider Modes
+export enum ColorProvider {
+  Managed = 'Managed',  // Use platform theme
+  Default = 'Default',  // Use built-in brand theme
+  Custom = 'Custom'     // User's custom color
+}
+```
+
+**Storage**:
+- User preferences stored in `localStorage`
+- Key: `custom-theme`
+- Format: Hex color string (e.g., `#FF6B6B`) or `brand` for default
+
+Reference: `/src/GZCTF/ClientApp/src/utils/ThemeOverride.ts:186-234`
+
+### Dark Mode
+
+GZCTF supports automatic dark mode:
+
+```typescript Dark Mode Colors
+colors: {
+  dark: [
+    '#d5d7d7',  // Lightest (text on dark bg)
+    '#acaeae',
+    '#8c8f8f',
+    '#666969',
+    '#4d4f4f',
+    '#343535',
+    '#2b2c2c',
+    '#1d1e1e',
+    '#0c0d0d',
+    '#010101'   // Darkest (dark mode background)
+  ]
+}
+```
+
+Toggle via user menu or system preference detection.
+
+Reference: `/src/GZCTF/ClientApp/src/utils/ThemeOverride.ts:75-86`
+
+## Internationalization (i18n)
+
+### Supported Languages
+
+GZCTF supports 11 languages with varying translation coverage:
+
+```typescript Language Map
+export const LanguageMap = {
+  'en-US': '🇺🇸 English',
+  'zh-CN': '🇨🇳 简体中文',
+  'zh-TW': '🇨🇳 繁體中文',
+  'ja-JP': '🇯🇵 日本語',
+  'id-ID': '🇮🇩 Bahasa',
+  'ko-KR': '🇰🇷 한국어',
+  'ru-RU': '🇷🇺 Русский',
+  'vi-VN': '🇻🇳 Tiếng việt',
+  'de-DE': '🇩🇪 Deutsch (MT)',     // Machine Translation
+  'fr-FR': '🇫🇷 Français (MT)',    // Machine Translation
+  'es-ES': '🇪🇸 Español (MT)'      // Machine Translation
+}
+```
+
+**Translation Status**:
+- ✅ **Complete**: en-US, zh-CN, zh-TW, ja-JP, id-ID, ko-KR, ru-RU, vi-VN
+- 🤖 **Machine Translated**: de-DE, fr-FR, es-ES
+
+Reference: `/src/GZCTF/ClientApp/src/utils/I18n.tsx:20-32`
+
+### Language Detection
+
+GZCTF automatically detects user language:
+
+```typescript Language Selection Priority
+1. User's saved preference (localStorage: 'language')
+2. Browser Accept-Language header
+3. Default fallback: 'en-US'
+```
+
+**Normalization**:
+```typescript
+export const convertLanguage = (language: string): SupportedLanguages => {
+  const normalizedLanguage = normalizeLanguage(language)
+  
+  const matchedLanguage = Object.keys(LanguageMap)
+    .filter(lang => normalizeLanguage(lang) === normalizedLanguage)
+  
+  if (matchedLanguage.length > 0) {
+    return matchedLanguage.at(0) as SupportedLanguages
+  }
+  
+  return defaultLanguage  // 'en-US'
+}
+```
+
+Reference: `/src/GZCTF/ClientApp/src/utils/I18n.tsx:181-190`
+
+### Translation Files
+
+**Client-Side** (React i18next):
+```
+ClientApp/src/locales/
+├─ en-US/
+│   ├─ common.json
+│   └─ admin.json
+├─ zh-CN/
+│   ├─ common.json
+│   └─ admin.json
+...
+```
+
+**Server-Side** (.NET Resources):
+```
+Resources/
+├─ Program.resx              (English)
+├─ Program.zh-CN.resx        (简体中文)
+├─ Program.ja-JP.resx        (日本語)
+...
+```
+
+### Contributing Translations
+
+GZCTF uses Crowdin for community translations:
+
+<Steps>
+  <Step title="Visit Crowdin Project">
+    [https://crowdin.com/project/gzctf](https://crowdin.com/project/gzctf)
+  </Step>
+  
+  <Step title="Select Your Language">
+    Choose the language you want to contribute to.
+  </Step>
+  
+  <Step title="Translate Strings">
+    Use the web interface to translate missing strings.
+  </Step>
+  
+  <Step title="Translations are Synced">
+    Approved translations are automatically pulled into the GitHub repository.
+  </Step>
+</Steps>
+
+Reference: `/src/GZCTF/ClientApp/src/utils/I18n.tsx:126-147`
+
+### Date and Time Localization
+
+GZCTF uses Day.js for localized date formatting:
+
+```typescript Date Format Customization
+const shortLocalFormat = new Map<string, ExtraLocalFormat>([
+  ['en', { SL: 'MM/DD', SLL: 'YY/MM/DD', SMY: 'MMMM, YYYY' }],
+  ['zh', { SL: 'MM/DD', SLL: 'YY/MM/DD', SMY: 'YYYY年MMM' }],
+  ['ja', { SL: 'MM/DD', SLL: 'YY/MM/DD', SMY: 'YYYY年MMM' }],
+  ['ko', { SL: 'MM/DD', SLL: 'YY/MM/DD', SMY: 'YYYY년 MMMM' }],
+  ['ru', { SL: 'DD.MM', SLL: 'DD.MM.YY', SMY: 'MMMM YYYY г.' }],
+  ['de', { SL: 'DD.MM', SLL: 'DD.MM.YY', SMY: 'MMMM YYYY' }],
+  ['fr', { SL: 'DD/MM', SLL: 'DD/MM/YY', SMY: 'MMMM YYYY' }],
+  ['es', { SL: 'DD/MM', SLL: 'DD/MM/YY', SMY: 'MMMM [de] YYYY' }]
+])
+```
+
+**Custom Format Codes**:
+- `SL` - Short date (month/day)
+- `SLL` - Short date with year  
+- `SMY` - Month and year
+
+**Usage**:
+```typescript
+import dayjs from 'dayjs'
+import { useLanguage } from '@Utils/I18n'
+
+const { locale } = useLanguage()
+
+// Displays as "03/01" in en-US, "01.03" in de-DE
+dayjs().locale(locale).format('SL')
+
+// Displays as "March, 2024" in en-US, "2024年3月" in zh-CN  
+dayjs().locale(locale).format('SMY')
+```
+
+Reference: `/src/GZCTF/ClientApp/src/utils/I18n.tsx:40-69`
+
+## Custom HTML and Styling
+
+### Component Customization
+
+GZCTF uses CSS Modules for scoped styling:
+
+```
+ClientApp/src/styles/
+├─ shared/
+│   ├─ Typography.module.css
+│   ├─ Banner.module.css
+│   ├─ Table.module.css
+│   └─ Misc.module.css
+├─ components/
+└─ pages/
+```
+
+**Example Customization**:
+```css Typography.module.css
+.title {
+  font-family: 'Lexend', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-ligatures: none;
+}
+```
+
+### Responsive Breakpoints
+
+GZCTF defines custom breakpoints for ultra-wide displays:
+
+```typescript Custom Breakpoints
+breakpoints: {
+  xs: '30em',    // 480px
+  sm: '48em',    // 768px
+  md: '64em',    // 1024px
+  lg: '74em',    // 1184px
+  xl: '90em',    // 1440px
+  w18: '1800px', // Ultra-wide
+  w24: '2400px',
+  w30: '3000px',
+  w36: '3600px',
+  w42: '4200px',
+  w48: '4800px'
+}
+```
+
+**Usage**:
+```typescript
+import { useMediaQuery } from '@mantine/hooks'
+
+const isUltraWide = useMediaQuery('(min-width: 1800px)')
+
+return (
+  <Container size={isUltraWide ? 'xl' : 'lg'}>
+    {/* Content adapts to screen size */}
+  </Container>
+)
+```
+
+Reference: `/src/GZCTF/ClientApp/src/utils/ThemeOverride.ts:96-108`
+
+### Component Overrides
+
+Default Mantine component props can be overridden:
+
+```typescript Component Defaults
+components: {
+  Loader: Loader.extend({
+    defaultProps: {
+      type: 'bars',  // Custom loading animation
+    }
+  }),
+  
+  Modal: Modal.extend({
+    defaultProps: {
+      centered: true,  // Always center modals
+      styles: {
+        title: {
+          fontWeight: 'bold'
+        }
+      }
+    }
+  }),
+  
+  Badge: Badge.extend({
+    defaultProps: {
+      variant: 'outline'  // Outlined badges by default
+    }
+  })
+}
+```
+
+Reference: `/src/GZCTF/ClientApp/src/utils/ThemeOverride.ts:109-183`
+
+## Footer Customization
+
+The footer supports HTML for rich formatting:
+
+```html Footer HTML Example
+Powered by <a href="https://github.com/GZTimeWalker/GZCTF">GZCTF</a> | 
+© 2024 <strong>Your Organization</strong> | 
+<a href="https://example.com/privacy">Privacy Policy</a> | 
+<a href="https://example.com/terms">Terms of Service</a>
+```
+
+**Configuration**:
+1. Via Admin Panel: **Settings** → **Platform** → **Footer Info**
+2. Via Config: `GlobalConfig.FooterInfo`
+
+**Rendering**:
+```typescript
+<Text 
+  size="sm" 
+  c="dimmed" 
+  dangerouslySetInnerHTML={{ __html: config.footerInfo }}
+/>
+```
+
+<Warning>
+**XSS Warning**: Footer HTML is rendered with `dangerouslySetInnerHTML`. Only allow trusted admins to edit this field.
+</Warning>
+
+## API Customization
+
+### Client Configuration Endpoint
+
+The client configuration is cached and served efficiently:
+
+```typescript
+GET /api/config
+
+Response:
+{
+  "title": "GZ",
+  "slogan": "Hack for fun not for profit",
+  "footerInfo": "Powered by GZCTF",
+  "customTheme": "#FF6B6B",
+  "apiPublicKey": "base64_public_key",
+  "logoUrl": "/assets/abc123.../logo",
+  "portMapping": "PlatformProxy",
+  "defaultLifetime": 120,
+  "extensionDuration": 120,
+  "renewalWindow": 10
+}
+```
+
+**Caching**:
+- Redis/Memory cache with 10-minute expiration
+- Automatic invalidation on config changes
+- Supports MemoryPack serialization for efficiency
+
+Reference: `/src/GZCTF/Models/Internal/Configs.cs:294-375`
+
+### Cache Flush on Changes
+
+Config properties trigger automatic cache invalidation:
+
+```csharp Cache Flush Attributes
+[CacheFlush(CacheKey.ClientConfig)]
+public string CustomTheme { get; set; }
+
+[CacheFlush(CacheKey.Index)]
+public string? Description { get; set; }
+```
+
+When these properties change, affected caches are automatically flushed.
+
+Reference: `/src/GZCTF/Models/Internal/Configs.cs:23-30`
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Branding Consistency" icon="paintbrush">
+    - Use consistent colors across logo, theme, and assets
+    - Keep title short (2-4 characters works best)
+    - Choose readable fonts for all languages
+  </Card>
+  
+  <Card title="Performance" icon="gauge-high">
+    - Use vector graphics (SVG) for logos when possible
+    - Optimize images (WebP for photos, PNG for graphics)
+    - Leverage asset hash caching
+  </Card>
+  
+  <Card title="Accessibility" icon="universal-access">
+    - Ensure sufficient color contrast (WCAG AA minimum)
+    - Test dark mode with custom themes
+    - Verify readability in all supported languages
+  </Card>
+  
+  <Card title="Localization" icon="globe">
+    - Test UI with longest language (usually German/Russian)
+    - Avoid text in images (use overlay text instead)
+    - Contribute translations back to Crowdin
+  </Card>
+</CardGroup>
+
+## Advanced Customization
+
+### Forking the Frontend
+
+For deep customization, fork the React frontend:
+
+<Steps>
+  <Step title="Clone Repository">
+    ```bash
+    git clone https://github.com/GZTimeWalker/GZCTF
+    cd GZCTF/src/GZCTF/ClientApp
+    ```
+  </Step>
+  
+  <Step title="Install Dependencies">
+    ```bash
+    pnpm install
+    ```
+  </Step>
+  
+  <Step title="Customize Components">
+    Edit files in `src/components/`, `src/pages/`, `src/styles/`
+  </Step>
+  
+  <Step title="Build and Deploy">
+    ```bash
+    pnpm build
+    ```
+    
+    Built assets in `dist/` are served by the .NET backend.
+  </Step>
+</Steps>
+
+### Custom CSS Variables
+
+Override Mantine CSS variables globally:
+
+```css App.css
+:root {
+  --mantine-color-brand-filled: #00AA85;
+  --mantine-color-brand-light: #E1FFF9;
+  --mantine-spacing-xl: 2rem;
+  --mantine-radius-md: 0.5rem;
+}
+```
+
+## Resource Files
+
+### Server-Side Resources
+
+Resource files contain localized strings for error messages, emails, etc.:
+
+```
+Resources/
+├─ Program.resx            (English - default)
+├─ Program.zh-CN.resx      (Simplified Chinese)
+├─ Program.zh-TW.resx      (Traditional Chinese)
+├─ Program.ja-JP.resx      (Japanese)
+├─ Program.ko-KR.resx      (Korean)
+├─ Program.ru-RU.resx      (Russian)
+├─ Program.vi-VN.resx      (Vietnamese)
+├─ Program.id-ID.resx      (Indonesian)
+├─ Program.de-DE.resx      (German)
+├─ Program.fr-FR.resx      (French)
+├─ Program.es-ES.resx      (Spanish)
+└─ favicon.webp            (Default favicon)
+```
+
+**Usage in Code**:
+```csharp
+using Microsoft.Extensions.Localization;
+
+public class MyService(IStringLocalizer<Program> localizer)
+{
+    public string GetMessage()
+    {
+        return localizer[nameof(Resources.Program.MyResourceKey)];
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Dynamic Flags" icon="flag" href="./dynamic-flags">
+    Implement per-team flag generation
+  </Card>
+  <Card title="Integrations" icon="plug" href="./integrations">
+    Set up monitoring and external services
+  </Card>
+</CardGroup>

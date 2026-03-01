@@ -1,0 +1,283 @@
+---
+title: Dynamic Scoring
+description: Understanding GZCTF's dynamic scoring formula, blood bonuses, and score calculation
+---
+
+GZCTF uses a dynamic scoring system where challenge values decrease as more teams solve them, rewarding teams who solve challenges earlier.
+
+## Dynamic Score Formula
+
+The score for a challenge is calculated using an exponential decay formula:
+
+$$
+f(S, r, d, x) = \left \lfloor S \times \left[r  + ( 1- r) \times \exp\left( \dfrac{1 - x}{d} \right) \right] \right \rfloor
+$$
+
+### Parameters
+
+<ParamField path="S" type="number" required>
+  **Original Score**: The base point value of the challenge (configured by admin)
+</ParamField>
+
+<ParamField path="r" type="number" default="0.0 to 1.0" required>
+  **Minimum Score Ratio**: The lowest percentage of original score the challenge can reach
+  
+  For example, `r = 0.2` means the challenge will never drop below 20% of its original value.
+</ParamField>
+
+<ParamField path="d" type="number" required>
+  **Difficulty Coefficient**: Controls how quickly the score decreases
+  
+  - **Lower values** (e.g., 5): Score drops quickly
+  - **Higher values** (e.g., 20): Score drops slowly
+</ParamField>
+
+<ParamField path="x" type="number" required>
+  **Submission Count**: Number of teams that have solved the challenge
+</ParamField>
+
+### Example Calculation
+
+Given a challenge with:
+- Original score: **S = 1000**
+- Minimum ratio: **r = 0.3** (30% minimum)
+- Difficulty: **d = 10**
+- Solves: **x = 5** teams
+
+```math
+f(1000, 0.3, 10, 5) = floor(1000 × [0.3 + 0.7 × exp((1-5)/10)])
+                    = floor(1000 × [0.3 + 0.7 × exp(-0.4)])
+                    = floor(1000 × [0.3 + 0.7 × 0.6703])
+                    = floor(1000 × 0.7692)
+                    = 769 points
+```
+
+<Tip>
+  The formula satisfies most dynamic scoring requirements by allowing customization of the three key parameters: original score, minimum ratio, and difficulty coefficient.
+</Tip>
+
+## Score Decay Behavior
+
+Here's how the score changes as more teams solve a challenge:
+
+<CodeGroup>
+```python Score Progression (S=1000, r=0.3, d=10)
+# Solves | Score | % of Original
+#    1   |  1000 |    100%
+#    2   |  949  |     95%
+#    5   |  769  |     77%
+#   10   |  564  |     56%
+#   20   |  398  |     40%
+#   50   |  310  |     31%
+#  100+  |  300  |     30% (minimum)
+```
+
+```python Fast Decay (S=1000, r=0.2, d=5)
+# Solves | Score | % of Original
+#    1   |  1000 |    100%
+#    2   |  854  |     85%
+#    5   |  495  |     49%
+#   10   |  280  |     28%
+#   20+  |  200  |     20% (minimum)
+```
+
+```python Slow Decay (S=1000, r=0.4, d=20)
+# Solves | Score | % of Original
+#    1   |  1000 |    100%
+#    5   |  893  |     89%
+#   10   |  770  |     77%
+#   20   |  601  |     60%
+#   50   |  454  |     45%
+#  100+  |  400  |     40% (minimum)
+```
+</CodeGroup>
+
+## Blood Bonuses
+
+The first three teams to solve a challenge receive bonus multipliers on top of the current score:
+
+<CardGroup cols={3}>
+  <Card title="First Blood" icon="medal" color="#FFD700">
+    **+50% bonus** (1.5x multiplier)
+    
+    First team to solve receives 150% of current score
+  </Card>
+  
+  <Card title="Second Blood" icon="medal" color="#C0C0C0">
+    **+30% bonus** (1.3x multiplier)
+    
+    Second team receives 130% of current score
+  </Card>
+  
+  <Card title="Third Blood" icon="medal" color="#CD7F32">
+    **+10% bonus** (1.1x multiplier)
+    
+    Third team receives 110% of current score
+  </Card>
+</CardGroup>
+
+<Note>
+  Blood bonuses are awarded based on the order of **accepted submissions**, not submission time. Only correct flags count.
+</Note>
+
+### Blood Bonus Configuration
+
+Blood bonuses are configurable per game:
+
+```cs
+public struct BloodBonus
+{
+    public long FirstBlood { get; }   // Parts per thousand (e.g., 500 = 50%)
+    public long SecondBlood { get; }
+    public long ThirdBlood { get; }
+    
+    // Default: 50%, 30%, 10%
+    public const long DefaultValue = (50 << 20) + (30 << 10) + 10;
+}
+```
+
+The bonus percentages are stored as **parts per thousand** for precision:
+- `500` = 50.0%
+- `300` = 30.0%
+- `100` = 10.0%
+- `50` = 5.0%
+
+### Example with Blood Bonus
+
+A challenge worth **800 points** at the time of solving:
+
+| Position | Base Score | Bonus | Multiplier | Final Score |
+|----------|------------|-------|------------|--------------|
+| 1st solve | 800 | +50% | 1.5x | **1200** |
+| 2nd solve | 789 | +30% | 1.3x | **1026** |
+| 3rd solve | 778 | +10% | 1.1x | **856** |
+| 4th solve | 768 | - | 1.0x | **768** |
+
+<Warning>
+  The score decreases between solves, so second and third blood receive bonuses on a slightly lower base score than first blood.
+</Warning>
+
+## Permissions and Scoring
+
+Not all teams affect the dynamic score calculation:
+
+### AffectDynamicScore Permission
+
+Teams must have the `AffectDynamicScore` permission for their solves to increment `x` in the formula:
+
+```cs
+public enum GamePermission
+{
+    AffectDynamicScore = 1 << 12  // Bit flag
+}
+```
+
+<Tabs>
+  <Tab title="With Permission">
+    **Official Teams**
+    
+    - Solves increment the submission count `x`
+    - Affect score for all teams
+    - Typical for main competition divisions
+  </Tab>
+  
+  <Tab title="Without Permission">
+    **Observer Teams**
+    
+    - Solves do NOT increment `x`
+    - Can still earn points (if `GetScore` permission enabled)
+    - Other teams' scores are unaffected
+    - Useful for guest/unofficial participants
+  </Tab>
+</Tabs>
+
+### GetScore Permission
+
+Separately, teams need `GetScore` permission to actually receive points:
+
+```cs
+GetScore = 1 << 10
+```
+
+<Info>
+  A team can have `GetScore` without `AffectDynamicScore` - they earn points but don't affect others' challenge values.
+</Info>
+
+## Score Calculation Flow
+
+When a team submits a correct flag:
+
+<Steps>
+  <Step title="Count submissions">
+    Calculate `x` = number of teams with `AffectDynamicScore` permission who have solved the challenge
+  </Step>
+  
+  <Step title="Apply formula">
+    Calculate current score using the dynamic formula:
+    ```
+    score = floor(S × [r + (1-r) × exp((1-x)/d)])
+    ```
+  </Step>
+  
+  <Step title="Apply blood bonus">
+    If this is the 1st, 2nd, or 3rd solve:
+    ```
+    score = score × bloodMultiplier
+    ```
+  </Step>
+  
+  <Step title="Award points">
+    If team has `GetScore` permission, add the score to their total
+  </Step>
+  
+  <Step title="Update rankings">
+    Recalculate scoreboard positions based on total scores and solve times
+  </Step>
+</Steps>
+
+## Scoreboard Tie-Breaking
+
+When teams have the same total score, tie-breaking uses:
+
+1. **Total Score** (primary)
+2. **Time of Last Accepted Submission** (earlier is better)
+3. **Team ID** (lower is better, rare edge case)
+
+This ensures teams who reach the same score first rank higher.
+
+## Division-Specific Scoring
+
+Divisions can have separate scoreboards:
+
+<AccordionGroup>
+  <Accordion title="Overall Scoreboard">
+    Includes all teams with `RankOverall` permission
+    
+    - Typically for official participants
+    - Determines final rankings and prizes
+  </Accordion>
+  
+  <Accordion title="Division Scoreboard">
+    Shows rankings within a specific division
+    
+    - All teams in the division (regardless of `RankOverall`)
+    - Useful for regional or skill-based rankings
+  </Accordion>
+</AccordionGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Challenges" icon="flag" href="/concepts/challenges">
+    Configure challenge base scores and types
+  </Card>
+  <Card title="Games" icon="trophy" href="/concepts/games">
+    Set up blood bonuses and game configuration
+  </Card>
+  <Card title="Teams & Divisions" icon="users" href="/concepts/teams">
+    Manage team permissions and divisions
+  </Card>
+  <Card title="Participating" icon="paper-plane" href="/user-guide/participating">
+    Understand flag submission and validation
+  </Card>
+</CardGroup>

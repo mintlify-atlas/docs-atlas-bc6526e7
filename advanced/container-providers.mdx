@@ -1,0 +1,441 @@
+---
+title: Container Provider Implementation
+description: Deep dive into Docker and Kubernetes container providers in GZCTF
+---
+
+GZCTF supports multiple container orchestration backends through a provider abstraction layer. This allows the platform to manage challenge containers using either Docker or Kubernetes, with full feature parity across both implementations.
+
+## Architecture Overview
+
+The container provider system consists of three main components:
+
+- **Provider Layer** (`IContainerProvider`) - Handles provider initialization, authentication, and metadata
+- **Manager Layer** (`IContainerManager`) - Implements container lifecycle operations (create, destroy)
+- **Network Configuration** - Manages isolation policies and network modes
+
+<CodeGroup>
+```csharp Provider Interface
+public interface IContainerProvider<out TProvider, out TMetadata>
+{
+    TProvider GetProvider();
+    TMetadata GetMetadata();
+}
+```
+
+```csharp Manager Interface  
+public interface IContainerManager
+{
+    Task<Container?> CreateContainerAsync(ContainerConfig config, CancellationToken token);
+    Task DestroyContainerAsync(Container container, CancellationToken token);
+}
+```
+</CodeGroup>
+
+Reference: `/src/GZCTF/Services/Container/Provider/IContainerProvider.cs:1-17`
+
+## Docker Provider
+
+The Docker provider uses Docker.DotNet to communicate with the Docker daemon via REST API.
+
+### Configuration
+
+Docker provider configuration is loaded from `appsettings.json`:
+
+```json
+{
+  "ContainerProvider": {
+    "Type": "Docker",
+    "DockerConfig": {
+      "Uri": "unix:///var/run/docker.sock",
+      "UserName": "",
+      "Password": "",
+      "ChallengeNetwork": "gzctf"
+    },
+    "PortMappingType": "Default",
+    "PublicEntry": "ctf.example.com"
+  }
+}
+```
+
+### Network Modes
+
+The Docker provider creates and manages three network types:
+
+<AccordionGroup>
+  <Accordion title="Open Network" icon="network-wired">
+    Bridge network that allows outbound internet access with IP masquerading enabled.
+    
+    ```csharp
+    new NetworksCreateParameters
+    {
+        Name = "gzctf-open",
+        Driver = "bridge",
+        Attachable = true
+    }
+    ```
+    
+    Reference: `/src/GZCTF/Services/Container/Provider/DockerProvider.cs:123-136`
+  </Accordion>
+
+  <Accordion title="Isolated Network" icon="shield-halved">
+    Bridge network with IP masquerading disabled to prevent outbound traffic.
+    
+    ```csharp
+    new NetworksCreateParameters
+    {
+        Name = "gzctf-isolated",
+        Driver = "bridge",
+        Attachable = true,
+        Options = new Dictionary<string, string>
+        {
+            ["com.docker.network.bridge.enable_ip_masquerade"] = "false"
+        }
+    }
+    ```
+    
+    <Note>
+    Internal networks disable port mapping entirely. GZCTF uses IP masquerading control instead.
+    See [moby/moby#36174](https://github.com/moby/moby/issues/36174#issuecomment-2527195596)
+    </Note>
+    
+    Reference: `/src/GZCTF/Services/Container/Provider/DockerProvider.cs:139-159`
+  </Accordion>
+
+  <Accordion title="Custom Network" icon="circle-nodes">
+    User-defined network that GZCTF will attach to if it exists. Useful for connecting challenges to external services.
+    
+    Reference: `/src/GZCTF/Services/Container/Provider/DockerProvider.cs:117-120`
+  </Accordion>
+</AccordionGroup>
+
+### Container Creation
+
+The Docker manager handles the complete container lifecycle:
+
+```csharp Container Creation Flow
+// 1. Generate unique container name from image and flag hash
+var name = $"{imageName}_{flagHash[..16]}";
+
+// 2. Configure container with resource limits
+var parameters = new CreateContainerParameters
+{
+    Image = config.Image,
+    Name = name,
+    Env = [
+        $"GZCTF_FLAG={flag}",
+        $"GZCTF_TEAM_ID={teamId}"
+    ],
+    HostConfig = new()
+    {
+        Memory = memoryLimit * 1024 * 1024,  // MB to bytes
+        CPUPercent = cpuCount * 10,           // 0.1 CPU units
+        NetworkMode = networkName
+    }
+};
+
+// 3. Pull image if not found, retry up to 3 times
+// 4. Start container and verify status
+// 5. Inspect to get IP address and port bindings
+```
+
+Reference: `/src/GZCTF/Services/Container/Manager/DockerManager.cs:71-259`
+
+### Registry Authentication
+
+Docker provider supports multiple registry configurations:
+
+```json
+{
+  "Registry": {
+    "docker.io": {
+      "UserName": "myuser",
+      "Password": "mypass"
+    },
+    "ghcr.io": {
+      "UserName": "github-user",
+      "Password": "ghp_token"
+    }
+  }
+}
+```
+
+Authentication configs are stored per-registry and automatically applied during image pulls.
+
+Reference: `/src/GZCTF/Services/Container/Provider/DockerProvider.cs:84-94`
+
+## Kubernetes Provider
+
+The Kubernetes provider uses the official Kubernetes C# client to manage pods and services.
+
+### Configuration
+
+```json
+{
+  "ContainerProvider": {
+    "Type": "Kubernetes",
+    "KubernetesConfig": {
+      "KubeConfig": "/path/to/kubeconfig",
+      "Namespace": "gzctf-challenges",
+      "Dns": ["223.5.5.5", "114.114.114.114"],
+      "AllowCidr": ["10.0.0.0/8", "172.16.0.0/12"]
+    }
+  }
+}
+```
+
+<Note>
+If `KubeConfig` is not specified and GZCTF is running in-cluster, it will automatically use the ServiceAccount token.
+</Note>
+
+### Network Policies
+
+Kubernetes provider uses NetworkPolicy resources instead of Docker bridge networks:
+
+<CodeGroup>
+```yaml Open Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gzctf-network-open
+spec:
+  podSelector:
+    matchLabels:
+      gzctf.gzti.me/NetworkMode: open
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8      # Block internal networks
+              - 172.16.0.0/12
+```
+
+```yaml Isolated Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gzctf-network-isolated
+spec:
+  podSelector:
+    matchLabels:
+      gzctf.gzti.me/NetworkMode: isolated
+  policyTypes:
+    - Egress
+  egress: []  # Block all outbound traffic
+```
+</CodeGroup>
+
+Reference: `/src/GZCTF/Services/Container/Provider/KubernetesProvider.cs:115-180`
+
+### Pod Creation
+
+Kubernetes manager creates pods with companion services:
+
+```csharp Pod Specification
+var pod = new V1Pod
+{
+    Metadata = new V1ObjectMeta
+    {
+        Name = name,
+        Namespace = "gzctf-challenges",
+        Labels = new Dictionary<string, string>
+        {
+            ["gzctf.gzti.me/ResourceId"] = name,
+            ["gzctf.gzti.me/Image"] = imageShortName,
+            ["gzctf.gzti.me/TeamId"] = teamId,
+            ["gzctf.gzti.me/NetworkMode"] = networkMode
+        }
+    },
+    Spec = new V1PodSpec
+    {
+        Containers = [
+            new V1Container
+            {
+                Name = name,
+                Image = image,
+                Env = [
+                    new V1EnvVar { Name = "GZCTF_FLAG", Value = flag },
+                    new V1EnvVar { Name = "GZCTF_TEAM_ID", Value = teamId }
+                ],
+                Resources = new V1ResourceRequirements
+                {
+                    Limits = new Dictionary<string, ResourceQuantity>
+                    {
+                        ["cpu"] = new($"{cpuCount * 100}m"),
+                        ["memory"] = new($"{memoryLimit}Mi"),
+                        ["ephemeral-storage"] = new($"{storageLimit}Mi")
+                    }
+                }
+            }
+        ],
+        RestartPolicy = "Never",
+        DnsPolicy = "None",
+        DnsConfig = new() { Nameservers = dnsServers }
+    }
+};
+```
+
+Reference: `/src/GZCTF/Services/Container/Manager/KubernetesManager.cs:72-125`
+
+### Service Creation
+
+Each pod gets a corresponding service for networking:
+
+```csharp
+var service = new V1Service
+{
+    Spec = new V1ServiceSpec
+    {
+        Type = portMappingType == PlatformProxy ? "ClusterIP" : "NodePort",
+        Ports = [new V1ServicePort 
+        { 
+            Port = exposedPort, 
+            TargetPort = exposedPort 
+        }],
+        Selector = new Dictionary<string, string> 
+        { 
+            ["gzctf.gzti.me/ResourceId"] = podName 
+        }
+    }
+};
+```
+
+Reference: `/src/GZCTF/Services/Container/Manager/KubernetesManager.cs:151-168`
+
+### Registry Secrets
+
+Kubernetes provider creates `dockerconfigjson` secrets for private registries:
+
+```csharp
+var dockerConfig = new {
+    auths = new Dictionary<string, object> {
+        [registryUrl] = new {
+            auth = Base64(username + ":" + password),
+            username = username,
+            password = password
+        }
+    }
+};
+
+var secret = new V1Secret
+{
+    Type = "kubernetes.io/dockerconfigjson",
+    Data = new Dictionary<string, byte[]> {
+        [".dockerconfigjson"] = UTF8.GetBytes(JsonSerialize(dockerConfig))
+    }
+};
+```
+
+Reference: `/src/GZCTF/Services/Container/Provider/KubernetesProvider.cs:182-214`
+
+## Port Mapping Types
+
+GZCTF supports three port mapping strategies:
+
+<CardGroup cols={3}>
+  <Card title="Default" icon="arrow-right-arrow-left">
+    **Docker**: Host port mapping  
+    **K8s**: NodePort service
+    
+    Players connect directly to `publicEntry:randomPort`
+  </Card>
+  
+  <Card title="PlatformProxy" icon="network-wired">
+    Players connect via WebSocket proxy at `/api/proxy/{containerId}`
+    
+    Supports TCP traffic capture and PCAP generation.
+  </Card>
+  
+  <Card title="Randomize" icon="shuffle">
+    Similar to Default but randomizes exposed ports for each container.
+  </Card>
+</CardGroup>
+
+## Environment Variable Injection
+
+<Warning>
+The `GZCTF_FLAG` and `GZCTF_TEAM_ID` environment variables are **protected** under the Restricted License (LicenseRef-GZCTF-Restricted). 
+
+Unauthorized removal or modification of these variables may constitute license violation.
+</Warning>
+
+Both providers inject these variables into every container:
+
+- `GZCTF_FLAG` - The dynamic flag for this team/challenge combination
+- `GZCTF_TEAM_ID` - The team identifier for logging and tracking
+
+Reference: `/src/GZCTF/Services/Container/Manager/DockerManager.cs:274-287`
+
+## Resource Limits
+
+Container resources are controlled via the challenge configuration:
+
+```typescript Container Resource Configuration
+interface ContainerConfig {
+  memoryLimit: number;    // MB, default: 64
+  cpuCount: number;       // 0.1 CPU units, default: 1 (= 0.1 CPU)
+  storageLimit: number;   // MB, default: 256 (K8s only)
+  exposePort: number;     // TCP port, default: 80
+}
+```
+
+**Docker** applies limits via `HostConfig`:
+- `Memory`: MB × 1024 × 1024 (bytes)
+- `CPUPercent`: cpuCount × 10 (percentage)
+
+**Kubernetes** applies limits via `ResourceRequirements`:
+- `cpu`: cpuCount × 100 (millicores)
+- `memory`: memoryLimit (Mi)
+- `ephemeral-storage`: storageLimit (Mi)
+
+Reference: `/src/GZCTF/Models/Internal/ContainerConfig.cs:1-60`
+
+## Self-Network Attachment
+
+When GZCTF itself runs in Docker, it automatically attaches to challenge networks to enable platform proxy mode:
+
+```csharp
+var selfContainerId = Environment.GetEnvironmentVariable("HOSTNAME");
+if (!string.IsNullOrEmpty(selfContainerId))
+{
+    _dockerClient.Networks.ConnectNetworkAsync(
+        networkName, 
+        new NetworkConnectParameters { Container = selfContainerId }
+    );
+}
+```
+
+This allows the GZCTF container to directly communicate with challenge containers for TCP proxying.
+
+Reference: `/src/GZCTF/Services/Container/Provider/DockerProvider.cs:161-176`
+
+## Choosing a Provider
+
+<AccordionGroup>
+  <Accordion title="Use Docker When" icon="docker">
+    - Running small to medium deployments (< 50 concurrent containers)
+    - Simple networking requirements
+    - Deploying on a single host
+    - Lower complexity infrastructure
+  </Accordion>
+
+  <Accordion title="Use Kubernetes When" icon="dharmachakra">
+    - Running large-scale competitions (100+ concurrent containers)
+    - Need multi-node orchestration
+    - Require advanced scheduling and resource management
+    - Need integration with existing K8s infrastructure
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Traffic Capture" icon="network-wired" href="./traffic-capture">
+    Learn how to capture and analyze container network traffic
+  </Card>
+  <Card title="Dynamic Flags" icon="flag" href="./dynamic-flags">
+    Understand flag generation and injection mechanisms
+  </Card>
+</CardGroup>

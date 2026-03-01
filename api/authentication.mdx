@@ -1,0 +1,221 @@
+---
+title: 'Authentication'
+description: 'Authentication methods and security for GZCTF API'
+icon: 'lock'
+---
+
+## Overview
+
+GZCTF supports multiple authentication methods for API access:
+
+1. **Session-based authentication** - Cookie-based sessions for web applications
+2. **API tokens** - Bearer tokens for programmatic access (Admin only)
+
+## Session Authentication
+
+### Login
+
+Authenticate using username/email and password to establish a session.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-instance.com/api/account/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userName": "user@example.com",
+    "password": "encrypted_password"
+  }'
+```
+
+```javascript JavaScript
+fetch('https://your-instance.com/api/account/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  credentials: 'include',
+  body: JSON.stringify({
+    userName: 'user@example.com',
+    password: 'encrypted_password'
+  })
+})
+```
+</CodeGroup>
+
+### Endpoint: POST /api/account/login
+
+<ParamField body="userName" type="string" required>
+  Username or email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User password (may require encryption based on platform settings)
+</ParamField>
+
+<ResponseField name="status" type="integer">
+  HTTP status code: 200 for success, 401 for invalid credentials
+</ResponseField>
+
+<Expandable title="Response Codes">
+  - `200` - Successfully authenticated, session cookie set
+  - `400` - Validation failed (e.g., captcha required)
+  - `401` - Invalid username or password
+  - `401` - User account is disabled
+</Expandable>
+
+### Logout
+
+Terminate the current session.
+
+#### Endpoint: POST /api/account/logout
+
+<Note>Requires authentication. This endpoint will clear the session cookie.</Note>
+
+```bash
+curl -X POST https://your-instance.com/api/account/logout \
+  -H "Cookie: .AspNetCore.Identity.Application=..." 
+```
+
+## API Tokens
+
+API tokens provide a secure way for administrators to access the API programmatically without session cookies.
+
+### Generate Token
+
+Create a new API token with optional expiration.
+
+#### Endpoint: POST /api/tokens
+
+<Note>Requires Admin permission. Tokens are shown only once upon creation.</Note>
+
+<ParamField body="name" type="string" required>
+  Descriptive name for the token
+</ParamField>
+
+<ParamField body="expiresIn" type="integer">
+  Number of days until token expiration (optional, 0 = no expiration)
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "CI/CD Pipeline Token",
+  "createdAt": "2026-03-01T12:00:00Z",
+  "expiresAt": "2026-04-01T12:00:00Z",
+  "creatorId": "user-guid"
+}
+```
+</ResponseExample>
+
+### List Tokens
+
+Retrieve all API tokens.
+
+#### Endpoint: GET /api/tokens
+
+<Note>Requires Admin permission.</Note>
+
+<ResponseExample>
+```json Response
+[
+  {
+    "id": "token-guid-1",
+    "name": "Production API",
+    "createdAt": "2026-01-15T08:00:00Z",
+    "expiresAt": null,
+    "revokedAt": null,
+    "lastUsedAt": "2026-03-01T10:30:00Z"
+  },
+  {
+    "id": "token-guid-2",
+    "name": "Testing Token",
+    "createdAt": "2026-02-20T14:00:00Z",
+    "expiresAt": "2026-03-20T14:00:00Z",
+    "revokedAt": null
+  }
+]
+```
+</ResponseExample>
+
+### Revoke Token
+
+Revoke or delete an API token.
+
+#### Endpoint: DELETE /api/tokens/{id}
+
+<ParamField path="id" type="string" required>
+  Token UUID
+</ParamField>
+
+<ParamField query="delete" type="boolean" default="false">
+  If true, permanently delete the token instead of just revoking it
+</ParamField>
+
+### Restore Token
+
+Restore a previously revoked token.
+
+#### Endpoint: POST /api/tokens/{id}/restore
+
+<ParamField path="id" type="string" required>
+  Token UUID
+</ParamField>
+
+## Using API Tokens
+
+Include the token in the `Authorization` header:
+
+```bash
+curl -X GET https://your-instance.com/api/admin/users \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+## Permission Levels
+
+GZCTF uses role-based access control:
+
+| Role | Description |
+|------|-------------|
+| `User` | Standard user with access to games and teams |
+| `Monitor` | Can view game events, submissions, and captures |
+| `Admin` | Full administrative access |
+| `Banned` | No access (authentication fails) |
+
+### Authorization Attributes
+
+Endpoints are protected by middleware attributes:
+
+- `[RequireUser]` - Requires authenticated user
+- `[RequireMonitor]` - Requires Monitor or Admin role
+- `[RequireAdmin]` - Requires Admin role
+
+## Security Best Practices
+
+<Warning>
+  Never expose API tokens in client-side code or public repositories. Use environment variables or secure vaults.
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="Password Encryption">
+    When the platform has `ApiEncryption` enabled, passwords must be encrypted client-side before transmission. Check `/api/admin/config` for the current setting.
+  </Accordion>
+  
+  <Accordion title="Captcha Protection">
+    Registration and login endpoints may require captcha verification when `UseCaptcha` is enabled in account policies.
+  </Accordion>
+  
+  <Accordion title="Session Management">
+    Sessions are managed through cookies (`AspNetCore.Identity.Application`). Ensure your HTTP client supports cookies for session-based authentication.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Account API" icon="user" href="/api/account">
+    User registration and profile management
+  </Card>
+  <Card title="Admin API" icon="shield" href="/api/admin">
+    Administrative endpoints
+  </Card>
+</CardGroup>
