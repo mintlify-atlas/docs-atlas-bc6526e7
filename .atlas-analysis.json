@@ -1,0 +1,124 @@
+{
+  "projectType": "saas",
+  "projectName": "GZCTF",
+  "projectDescription": "An open-source CTF platform for hosting cybersecurity competitions with dynamic scoring and container management",
+  "theme": "aspen",
+  "primaryColor": "#ee3c4a",
+  "lightColor": "#ff6b77",
+  "darkColor": "#c91f2e",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/challenges",
+              "concepts/games",
+              "concepts/teams",
+              "concepts/scoring",
+              "concepts/containers"
+            ]
+          },
+          {
+            "group": "User Guide",
+            "pages": [
+              "user-guide/registration",
+              "user-guide/joining-teams",
+              "user-guide/participating",
+              "user-guide/writeups"
+            ]
+          },
+          {
+            "group": "Admin Guide",
+            "pages": [
+              "admin/creating-games",
+              "admin/challenge-management",
+              "admin/team-management",
+              "admin/monitoring",
+              "admin/configurations"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/kubernetes",
+              "deployment/configuration",
+              "deployment/security"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/container-providers",
+              "advanced/dynamic-flags",
+              "advanced/traffic-capture",
+              "advanced/integrations",
+              "advanced/customization"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/game",
+              "api/challenge",
+              "api/team",
+              "api/account",
+              "api/admin"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Dynamic and static challenge types with multiple attachment modes",
+    "Real-time scoreboard with dynamic scoring algorithm",
+    "Docker and Kubernetes container orchestration",
+    "Team management with divisions and participation controls",
+    "Real-time monitoring with SignalR for events and submissions",
+    "Traffic capture and TCP over WebSocket proxy",
+    "Multi-language support with internationalization",
+    "Writeup collection and review system",
+    "SMTP verification and Cloudflare Turnstile protection",
+    "Redis caching and PostgreSQL storage",
+    "Object storage support (MinIO, S3)",
+    "OpenTelemetry metrics and distributed tracing"
+  ],
+  "publicApiSurface": [
+    "GET /api/game/recent - Get recent games",
+    "GET /api/game/{id} - Get game details",
+    "POST /api/game/{id}/submit - Submit a flag",
+    "GET /api/game/{id}/challenges - Get game challenges",
+    "GET /api/game/{id}/scoreboard - Get scoreboard",
+    "POST /api/team/create - Create a team",
+    "GET /api/team/{id} - Get team information",
+    "POST /api/account/register - Register new account",
+    "POST /api/account/login - User login",
+    "GET /api/admin/games - List all games (admin)",
+    "POST /api/admin/games - Create new game (admin)",
+    "POST /api/admin/challenges - Create challenge (admin)"
+  ]
+}
